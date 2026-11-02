@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fayette County Sheriff's Office</title>
+  <meta name="description" content="The Fayette County Sheriff's Office in Kentucky State Roleplay. Committed to Service.">
+  <meta property="og:title" content="Fayette County Sheriff's Office">
+  <meta property="og:description" content="Kentucky's most professional, generous, and realistic department. Committed to Service.">
+  <meta property="og:image" content="https://fayettecountysheriffs.xyz/photo-tahoe.jpg">
+  <meta name="theme-color" content="#141b3d">
+  <link rel="icon" href="logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    /* ---------- hero: the livery ---------- */
+    .hero {
+      --gutter: max(16px, calc((100vw - var(--wrap)) / 2));
+      position: relative; overflow: hidden;
+      background: var(--khaki);
+      padding: 64px 0 72px;
+      min-height: 560px;
+    }
+    .hero-photo {
+      position: absolute; top: 0; right: 0; bottom: 0; width: 64%; height: 100%;
+      object-fit: cover; object-position: 60% 50%;
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 34%);
+      mask-image: linear-gradient(to right, transparent 0%, #000 34%);
+    }
+    .hero-inner { position: relative; }
+    .hero-badge { width: 84px; height: 84px; margin-bottom: 20px; filter: drop-shadow(0 2px 6px rgba(20, 27, 61, 0.25)); }
+
+    .stripe {
+      position: relative;
+      margin-left: calc(var(--gutter) * -1);
+      padding: 18px 64px 18px var(--gutter);
+      width: min(100vw, calc(var(--gutter) + 820px));
+      background: var(--blue);
+      clip-path: polygon(0 0, 100% 0, 100% 14%, 86% 100%, 0 100%);
+      animation: stripe-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    }
+    /* white pinstripe riding the top edge, like the decal */
+    .stripe::before {
+      content: ""; position: absolute; left: 0; right: 0; top: 7px; height: 3px; background: var(--white);
+      clip-path: polygon(0 0, 99% 0, 99% 100%, 0 100%);
+    }
+    .stripe h1 {
+      margin: 6px 0 0; color: var(--white);
+      font-size: clamp(2.7rem, 7vw, 5rem); font-style: italic; text-transform: uppercase; letter-spacing: 0.015em;
+      line-height: 0.95;
+      text-shadow: 0 2px 0 rgba(10, 16, 50, 0.35);
+    }
+    @keyframes stripe-in { from { transform: translateX(-102%); } to { transform: none; } }
+
+    .motto { font-family: var(--display); font-style: italic; font-weight: 700; color: var(--blue-deep); font-size: 1.35rem; margin: 14px 0 22px; }
+    .hero-lede { max-width: 470px; font-size: 1.08rem; color: var(--ink); }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+    .hero-live { margin-top: 26px; font-size: 0.95rem; color: var(--ink-soft); min-height: 1.6em; }
+    .hero-live b { color: var(--ink); }
+
+    @media (max-width: 860px) {
+      .hero { padding: 0 0 48px; min-height: 0; }
+      .hero-photo { position: static; width: 100%; height: 240px; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+      .hero-badge { display: none; }
+      .stripe { margin-top: -28px; padding-right: 40px; }
+    }
+
+    /* ---------- sections ---------- */
+    section.block { padding: 88px 0; }
+    section.block.tint { background: var(--white); border-block: 1px solid var(--line); }
+    .lead { font-size: 1.12rem; max-width: 64ch; color: var(--ink-soft); }
+
+    /* announcements */
+    #announcements { display: none; background: var(--ink); color: var(--white); padding: 28px 0; }
+    #announcements.show { display: block; }
+    .ann { display: grid; grid-template-columns: 140px 1fr; gap: 6px 24px; padding: 12px 0; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+    .ann:first-of-type { border-top: 0; }
+    .ann time { color: var(--khaki); font-size: 0.9rem; padding-top: 3px; }
+    .ann h3 { margin: 0 0 4px; font-size: 1.35rem; }
+    .ann p { margin: 0; color: rgba(255, 255, 255, 0.82); white-space: pre-line; }
+    @media (max-width: 640px) { .ann { grid-template-columns: 1fr; } }
+
+    /* about */
+    .about { display: grid; grid-template-columns: 1.4fr 1fr; gap: 56px; align-items: start; }
+    .about-photo img { border-radius: var(--radius); aspect-ratio: 4 / 3; object-fit: cover; width: 100%; }
+    .about-photo figcaption { font-size: 0.85rem; color: var(--ink-soft); margin-top: 8px; }
+    @media (max-width: 860px) { .about { grid-template-columns: 1fr; gap: 32px; } }
+
+    /* divisions */
+    .divisions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 56px; margin-top: 36px; }
+    .division { padding: 20px 0 20px 18px; border-left: 4px solid var(--blue); margin-bottom: 18px; background: linear-gradient(to right, rgba(43, 71, 201, 0.05), transparent 60%); }
+    .division h3 { margin-bottom: 4px; }
+    .division p { margin: 0; color: var(--ink-soft); }
+    @media (max-width: 760px) { .divisions { grid-template-columns: 1fr; } }
+
+    /* ranks: highest at the top, grouped by tier */
+    .ranks { margin-top: 36px; border-top: 2px solid var(--ink); }
+    .tier { display: grid; grid-template-columns: 240px 1fr; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .tier h3 { margin: 0; font-size: 1.3rem; }
+    .tier ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .tier li { background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 4px 14px; font-weight: 600; font-size: 0.95rem; }
+    .tier.top li { background: var(--ink); color: var(--white); border-color: var(--ink); }
+    @media (max-width: 640px) { .tier { grid-template-columns: 1fr; gap: 8px; } }
+
+    /* gallery */
+    .gallery { display: grid; grid-template-columns: 1.3fr 1fr; grid-template-rows: auto auto; gap: 12px; margin-top: 36px; }
+    .gallery figure { margin: 0; position: relative; overflow: hidden; border-radius: var(--radius); background: var(--ink); }
+    .gallery img { width: 100%; height: 100%; object-fit: cover; }
+    .gallery .tall { grid-row: span 2; }
+    .gallery figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 14px 10px; color: var(--white); font-size: 0.88rem; background: linear-gradient(transparent, rgba(10, 14, 35, 0.8)); }
+    @media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } .gallery .tall { grid-row: auto; } }
+
+    /* join: a real sequence */
+    .steps { list-style: none; counter-reset: step; padding: 0; margin: 36px 0 0; display: grid; gap: 0; max-width: 760px; }
+    .steps li { counter-increment: step; position: relative; padding: 0 0 30px 64px; }
+    .steps li::before {
+      content: counter(step); position: absolute; left: 0; top: -4px; width: 42px; height: 42px; border-radius: 50%;
+      display: grid; place-items: center; background: var(--blue); color: var(--white);
+      font: italic 700 1.3rem var(--display);
+    }
+    .steps li:not(:last-child)::after { content: ""; position: absolute; left: 20px; top: 42px; bottom: 2px; width: 2px; background: var(--line); }
+    .steps h3 { margin-bottom: 4px; font-size: 1.4rem; }
+    .steps p { margin: 0; color: var(--ink-soft); }
+    .join-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="./">
+        <img src="logo.png" alt="">
+        <span>Fayette County Sheriff's Office<small>Kentucky State Roleplay</small></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="nav">Menu</button>
+      <nav class="nav" id="nav" aria-label="Main">
+        <a href="#about">About</a>
+        <a href="#divisions">Divisions</a>
+        <a href="#ranks">Ranks</a>
+        <a href="#join">Join</a>
+        <a class="nav-portal" href="portal.html">Deputy portal</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="hero-photo" src="photo-tahoe.jpg" alt="A tan and blue Fayette Sheriff Tahoe parked at a gas station">
+      <div class="wrap hero-inner">
+        <img class="hero-badge" src="logo.png" alt="Fayette County Sheriff's Office badge">
+        <div class="stripe"><h1>Fayette County<br>Sheriff's Office</h1></div>
+        <p class="motto">Committed to Service</p>
+        <p class="hero-lede">Kentucky's most professional, generous, and realistic department, protecting the citizens of Fayette County in Kentucky State Roleplay.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://melon.ly/form/7511863119010861056" target="_blank" rel="noopener">Apply to the department</a>
+          <a class="btn btn-outline" href="https://discord.gg/nMPwQ7AFHk" target="_blank" rel="noopener">Join our Discord</a>
+        </div>
+        <p class="hero-live" id="live" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section id="announcements" aria-labelledby="ann-title">
+      <div class="wrap">
+        <h2 id="ann-title" class="sr-only">Announcements</h2>
+        <div id="ann-list"></div>
+      </div>
+    </section>
+
+    <section class="block" id="about">
+      <div class="wrap about">
+        <div>
+          <h2>Serving Fayette County</h2>
+          <p class="lead">The Fayette County Sheriff's Office is committed to serving and protecting the citizens of Fayette County, Kentucky, while upholding and enforcing the laws and values established by the United States Constitution.</p>
+          <p>Our goal is to maintain public safety, preserve order, and provide professional law enforcement services with integrity, respect, and dedication to the community. Every deputy comes up through our own academy and ride-along program, so the standard you see on the road is the same across the whole department.</p>
+          <p>We follow the Kentucky State Police 10-codes, phonetic alphabet, and standards, and work alongside the other agencies in Kentucky State Roleplay.</p>
+        </div>
+        <figure class="about-photo">
+          <img src="photo-explorers.jpg" alt="Two Fayette Sheriff Explorers, units 6213, parked on the shoulder at night" loading="lazy">
+          <figcaption>Patrol units on a night shift.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block tint" id="divisions">
+      <div class="wrap">
+        <h2>Divisions and special units</h2>
+        <p class="lead">Once you're through training, you can apply to join one of our divisions.</p>
+        <div class="divisions">
+          <div class="division"><h3>Special Operations Division</h3><p>Responds to high-risk calls and runs tactical and specialized operations.</p></div>
+          <div class="division"><h3>Traffic Services Division</h3><p>Traffic enforcement, crash investigation, and keeping county roads safe.</p></div>
+          <div class="division"><h3>Criminal Investigations Unit</h3><p>Follows up on serious crimes and works cases through to the end.</p></div>
+          <div class="division"><h3>Internal Affairs Division</h3><p>Keeps the department accountable through investigations, infractions, and reviews.</p></div>
+          <div class="division"><h3>Field Training Division</h3><p>Runs the academy and ride-alongs that bring new deputies onto the road.</p></div>
+          <div class="division"><h3>Public Relations Division</h3><p>Handles announcements, media, and community events for the department.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="ranks">
+      <div class="wrap">
+        <h2>Rank structure</h2>
+        <p class="lead">From the Office of the Sheriff down to our newest cadets, highest rank first.</p>
+        <div class="ranks">
+          <div class="tier top"><h3>High Command</h3><ol><li>Sheriff</li><li>Chief Deputy</li><li>Major</li></ol></div>
+          <div class="tier"><h3>Department Command Staff</h3><ol><li>Commander</li><li>Captain</li><li>Lieutenant</li></ol></div>
+          <div class="tier"><h3>Supervisory Board</h3><ol><li>Sergeant</li></ol></div>
+          <div class="tier"><h3>Patrol Staff</h3><ol><li>Corporal</li><li>Master Deputy</li><li>Deputy First Class</li><li>Deputy</li><li>Probationary Deputy</li></ol></div>
+          <div class="tier"><h3>Cadets</h3><ol><li>Cadet</li></ol></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block tint" id="gallery">
+      <div class="wrap">
+        <h2>On patrol</h2>
+        <div class="gallery">
+          <figure class="tall"><img src="photo-charger.jpg" alt="A Fayette Sheriff Charger, unit 6214, with its blue lights on at night" loading="lazy"><figcaption>Unit 6214 on a night call.</figcaption></figure>
+          <figure><img src="photo-marine.jpg" alt="Two deputies in a sheriff's boat on the river at night" loading="lazy"><figcaption>Marine patrol on the river.</figcaption></figure>
+          <figure><img src="photo-crownvic.jpg" alt="A deputy standing between two Crown Victorias" loading="lazy"><figcaption>Traffic stop on the county road.</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="join">
+      <div class="wrap">
+        <h2>How to join</h2>
+        <p class="lead">Every deputy goes through the same path, in this order.</p>
+        <ol class="steps">
+          <li><h3>Submit the entry application</h3><p>Tell us about yourself and your experience. Command reviews every application.</p></li>
+          <li><h3>Join the Discord and verify</h3><p>Verify your Roblox account in the verification channel to unlock the server.</p></li>
+          <li><h3>Pass the entrance exam</h3><p>A short exam on the basics before you start the academy.</p></li>
+          <li><h3>Complete the academy</h3><p>The Field Training Division teaches our procedures, radio codes, and standards.</p></li>
+          <li><h3>Finish your ride-along</h3><p>Patrol with a field training officer. Pass, and you're a Fayette County deputy.</p></li>
+        </ol>
+        <div class="join-actions">
+          <a class="btn btn-primary" href="https://melon.ly/form/7511863119010861056" target="_blank" rel="noopener">Start your application</a>
+          <a class="btn btn-outline" href="https://discord.gg/nMPwQ7AFHk" target="_blank" rel="noopener">Join our Discord</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div>&copy; <span id="year">2026</span> fayettecountysheriffs.xyz. A Kentucky State Roleplay department, not affiliated with any real agency.</div>
+      <div class="footer-links">
+        <a href="https://discord.gg/nMPwQ7AFHk" target="_blank" rel="noopener">Discord</a>
+        <a href="https://melon.ly/form/7511863119010861056" target="_blank" rel="noopener">Apply</a>
+        <a href="portal.html">Deputy portal</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
+</html>

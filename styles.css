@@ -1,0 +1,108 @@
+/* Fayette County Sheriff's Office - shared styles.
+   Palette taken from the patrol livery: tan body, royal-blue stripe, white pinstripe. */
+:root {
+  --ink: #141b3d;
+  --ink-soft: #4a5170;
+  --blue: #2b47c9;
+  --blue-deep: #1b2c86;
+  --khaki: #cbb891;
+  --khaki-pale: #ece4d3;
+  --paper: #f5f6f9;
+  --white: #ffffff;
+  --line: #d9dce6;
+  --danger: #b4232f;
+  --ok: #1f7a4d;
+
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Public Sans", system-ui, sans-serif;
+
+  --wrap: 1120px;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+img { max-width: 100%; display: block; }
+a { color: var(--blue); }
+a:hover { color: var(--blue-deep); }
+:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+h1, h2, h3 { font-family: var(--display); font-weight: 700; line-height: 1.05; margin: 0 0 0.5em; letter-spacing: 0.01em; }
+h2 { font-size: clamp(2rem, 4vw, 2.75rem); font-style: italic; }
+h3 { font-size: 1.45rem; }
+p { margin: 0 0 1em; }
+
+.wrap { width: min(var(--wrap), 100% - 32px); margin-inline: auto; }
+
+/* ---------- buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 600 1rem/1 var(--body);
+  padding: 14px 22px; border-radius: var(--radius);
+  border: 2px solid transparent; cursor: pointer; text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.btn-primary { background: var(--blue); color: var(--white); }
+.btn-primary:hover { background: var(--blue-deep); color: var(--white); }
+.btn-outline { border-color: var(--ink); color: var(--ink); background: transparent; }
+.btn-outline:hover { background: var(--ink); color: var(--white); }
+.btn-quiet { background: transparent; color: var(--ink-soft); padding: 10px 12px; }
+.btn-quiet:hover { color: var(--ink); background: rgba(20, 27, 61, 0.06); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover { background: var(--danger); color: var(--white); }
+.btn-sm { padding: 8px 14px; font-size: 0.9rem; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---------- top bar ---------- */
+.topbar { background: var(--ink); color: var(--white); position: relative; z-index: 5; }
+.topbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; }
+.brand { display: flex; align-items: center; gap: 12px; color: var(--white); text-decoration: none; }
+.brand img { width: 42px; height: 42px; }
+.brand span { font-family: var(--display); font-weight: 700; font-size: 1.3rem; letter-spacing: 0.02em; line-height: 1.05; }
+.brand small { display: block; font-family: var(--body); font-weight: 400; font-size: 0.75rem; letter-spacing: 0; opacity: 0.7; }
+.nav { display: flex; align-items: center; gap: 4px; }
+.nav a { color: rgba(255, 255, 255, 0.82); text-decoration: none; font-size: 0.95rem; padding: 8px 12px; border-radius: var(--radius); }
+.nav a:hover { color: var(--white); background: rgba(255, 255, 255, 0.08); }
+.nav a.nav-portal { background: var(--blue); color: var(--white); margin-left: 8px; }
+.nav a.nav-portal:hover { background: #3a58e0; }
+.nav-toggle { display: none; background: none; border: 0; color: var(--white); font: 600 0.95rem var(--body); padding: 10px; cursor: pointer; }
+
+@media (max-width: 860px) {
+  .nav-toggle { display: block; }
+  .nav { display: none; position: absolute; top: 68px; left: 0; right: 0; flex-direction: column; align-items: stretch; background: var(--ink); padding: 8px 16px 16px; }
+  .nav.open { display: flex; }
+  .nav a.nav-portal { margin: 8px 0 0; text-align: center; }
+}
+
+/* ---------- forms ---------- */
+label { display: block; font-weight: 600; font-size: 0.92rem; margin-bottom: 6px; }
+.field { margin-bottom: 18px; }
+.hint { font-size: 0.85rem; color: var(--ink-soft); margin-top: 4px; }
+input, select, textarea {
+  width: 100%; font: 400 1rem var(--body); color: var(--ink);
+  padding: 11px 12px; border: 1.5px solid var(--line); border-radius: var(--radius); background: var(--white);
+}
+input:focus, select:focus, textarea:focus { border-color: var(--blue); outline: none; box-shadow: 0 0 0 3px rgba(43, 71, 201, 0.18); }
+textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
+
+.form-error { color: var(--danger); font-weight: 600; font-size: 0.92rem; min-height: 1.4em; margin: 0 0 12px; }
+
+/* ---------- footer ---------- */
+.footer { background: var(--ink); color: rgba(255, 255, 255, 0.75); padding: 40px 0; font-size: 0.92rem; }
+.footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 20px; align-items: center; }
+.footer a { color: var(--white); }
+.footer-links { display: flex; flex-wrap: wrap; gap: 18px; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

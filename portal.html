@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deputy Portal | Fayette County Sheriff's Office</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#141b3d">
+  <link rel="icon" href="logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1; }
+
+    /* ---------- sign in ---------- */
+    .login { display: grid; place-items: center; padding: 64px 16px; }
+    .login-card { width: min(440px, 100%); background: var(--white); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 40px -24px rgba(20, 27, 61, 0.45); }
+    .login-head { background: var(--khaki); padding: 26px 28px 0; }
+    .login-head img { width: 64px; height: 64px; }
+    .login-stripe { margin: 16px -28px 0; padding: 12px 28px; background: var(--blue); clip-path: polygon(0 0, 100% 0, 100% 20%, 90% 100%, 0 100%); position: relative; }
+    .login-stripe::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 2px; background: var(--white); }
+    .login-stripe h1 { margin: 4px 0 0; color: var(--white); font-style: italic; text-transform: uppercase; font-size: 2rem; }
+    .login-body { padding: 26px 28px 28px; }
+    .login-body p { color: var(--ink-soft); font-size: 0.95rem; }
+    .login-body .btn { width: 100%; }
+    .login-foot { margin-top: 18px; text-align: center; font-size: 0.9rem; }
+
+    /* ---------- app shell ---------- */
+    .session { display: flex; align-items: center; gap: 12px; color: rgba(255, 255, 255, 0.8); font-size: 0.9rem; }
+    .session b { color: var(--white); }
+    .session .btn-quiet { color: rgba(255, 255, 255, 0.8); }
+    .session .btn-quiet:hover { color: var(--white); background: rgba(255, 255, 255, 0.1); }
+    .access-tag { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--khaki); color: var(--ink); }
+    .access-tag.admin { background: var(--blue); color: var(--white); }
+
+    .tabs { background: var(--white); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 4; }
+    .tabs .wrap { display: flex; gap: 4px; overflow-x: auto; }
+    .tabs a { padding: 16px 16px 13px; text-decoration: none; color: var(--ink-soft); font-weight: 600; border-bottom: 3px solid transparent; white-space: nowrap; }
+    .tabs a:hover { color: var(--ink); }
+    .tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--blue); }
+
+    .view { padding: 36px 0 64px; }
+    .view-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .view-head h2 { margin: 0; }
+    .view-head p { margin: 4px 0 0; color: var(--ink-soft); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .filters input { flex: 2 1 220px; }
+    .filters select { flex: 1 1 160px; width: auto; }
+
+    /* roster table */
+    .table-wrap { background: var(--white); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th { font-size: 0.82rem; color: var(--ink-soft); background: var(--paper); font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+    td.callsign { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .status { font-size: 0.82rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e3f1e9; color: var(--ok); white-space: nowrap; }
+    .status.leave, .status.reduced { background: #fbf0d9; color: #845a06; }
+    .status.suspended { background: #f9e1e3; color: var(--danger); }
+    .status.probationary { background: #e3e8fb; color: var(--blue-deep); }
+    .empty { padding: 40px 20px; text-align: center; color: var(--ink-soft); }
+    .count { color: var(--ink-soft); font-size: 0.9rem; margin-top: 10px; }
+
+    /* documents */
+    .docs { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: start; }
+    .doc-list { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 8px; position: sticky; top: 70px; max-height: calc(100vh - 100px); overflow-y: auto; }
+    .doc-list input { margin-bottom: 8px; }
+    .doc-group h3 { font-family: var(--body); font-size: 0.82rem; font-weight: 700; color: var(--ink-soft); margin: 12px 8px 6px; line-height: 1.3; }
+    .doc-group a { display: block; padding: 8px 10px; border-radius: var(--radius); text-decoration: none; color: var(--ink); font-size: 0.95rem; }
+    .doc-group a:hover { background: var(--paper); }
+    .doc-group a[aria-current="true"] { background: rgba(43, 71, 201, 0.1); color: var(--blue-deep); font-weight: 600; }
+    .reader { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 36px clamp(20px, 4vw, 48px) 48px; position: relative; min-height: 360px; overflow: hidden; }
+    .reader-meta { color: var(--ink-soft); font-size: 0.88rem; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+    .reader h1.doc-title { font-size: clamp(2rem, 4vw, 2.8rem); font-style: italic; margin-bottom: 6px; }
+    .prose { max-width: 72ch; }
+    .prose h1, .prose h2, .prose h3 { margin-top: 1.4em; font-style: normal; }
+    .prose h1 { font-size: 2rem; } .prose h2 { font-size: 1.6rem; } .prose h3 { font-size: 1.3rem; }
+    .prose table { margin: 1em 0; border: 1px solid var(--line); }
+    .prose blockquote { margin: 1em 0; padding: 8px 16px; border-left: 4px solid var(--khaki); background: var(--khaki-pale); }
+    .prose code { background: var(--paper); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .prose img { border-radius: var(--radius); }
+    @media (max-width: 900px) { .docs { grid-template-columns: 1fr; } .doc-list { position: static; max-height: none; } }
+
+    /* deputy copy protection + watermark */
+    body.locked .reader, body.locked .table-wrap { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    .watermark { position: absolute; inset: 0; pointer-events: none; opacity: 0.07; background-repeat: repeat; z-index: 1; }
+    .reader > *:not(.watermark) { position: relative; z-index: 2; }
+    @media print { body.locked main, body.locked header, body.locked nav { display: none !important; } body.locked::before { content: "Printing department documents is not allowed."; display: block; padding: 40px; font: 600 20px var(--body); } }
+
+    /* panels */
+    .panel { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 24px; }
+    .panel h3 { margin-bottom: 6px; }
+    .panel > p { color: var(--ink-soft); }
+    .ann-item, .audit-item { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .ann-item:first-child, .audit-item:first-child { border-top: 0; }
+    .ann-item p { margin: 4px 0 0; white-space: pre-line; color: var(--ink-soft); }
+    .audit-item { font-size: 0.92rem; padding: 10px 0; }
+    .audit-item time { color: var(--ink-soft); white-space: nowrap; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
+
+    /* dialogs */
+    dialog { border: 0; border-radius: 10px; padding: 0; width: min(560px, calc(100% - 32px)); box-shadow: 0 30px 70px -20px rgba(10, 14, 35, 0.5); color: var(--ink); }
+    dialog.wide { width: min(1100px, calc(100% - 32px)); }
+    dialog::backdrop { background: rgba(10, 14, 35, 0.55); }
+    .dlg-head { padding: 20px 24px 0; display: flex; justify-content: space-between; align-items: center; }
+    .dlg-head h2 { font-size: 1.9rem; margin: 0; }
+    .dlg-body { padding: 18px 24px 8px; max-height: calc(100vh - 220px); overflow-y: auto; }
+    .dlg-foot { padding: 14px 24px 22px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .dlg-foot .right { display: flex; gap: 10px; margin-left: auto; }
+    .editor { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .editor textarea { min-height: 420px; font-family: ui-monospace, Consolas, monospace; font-size: 0.92rem; }
+    .editor .preview { border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 16px; max-height: 452px; overflow-y: auto; }
+    @media (max-width: 860px) { .editor { grid-template-columns: 1fr; } }
+
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--white); padding: 12px 20px; border-radius: var(--radius); font-weight: 600; opacity: 0; transition: opacity 0.2s, transform 0.2s; z-index: 50; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%); }
+    .toast.error { background: var(--danger); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="./">
+        <img src="logo.png" alt="">
+        <span>Fayette County Sheriff's Office<small>Deputy portal</small></span>
+      </a>
+      <div class="session" id="session" hidden>
+        <span>Signed in as <b id="who"></b></span>
+        <span class="access-tag" id="access"></span>
+        <button class="btn btn-quiet btn-sm" id="signout">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- sign in -->
+    <section class="login" id="login" hidden>
+      <div class="login-card">
+        <div class="login-head">
+          <img src="logo.png" alt="Fayette County Sheriff's Office badge">
+          <div class="login-stripe"><h1>Deputy portal</h1></div>
+        </div>
+        <form class="login-body" id="login-form" novalidate>
+          <p>Sign in with the access code you were given by command. Your name is shown on any document you open.</p>
+          <div class="field">
+            <label for="login-name">Name or callsign</label>
+            <input id="login-name" autocomplete="nickname" required maxlength="40">
+          </div>
+          <div class="field">
+            <label for="login-code">Access code</label>
+            <input id="login-code" type="password" autocomplete="current-password" required>
+          </div>
+          <p class="form-error" id="login-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit" id="login-btn">Sign in</button>
+          <div class="login-foot"><a href="./">Back to the main site</a></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- app -->
+    <div id="app" hidden>
+      <nav class="tabs" aria-label="Portal">
+        <div class="wrap" id="tabs">
+          <a href="#roster" data-tab="roster">Roster</a>
+          <a href="#docs" data-tab="docs">Documents</a>
+          <a href="#announcements" data-tab="announcements" data-admin>Announcements</a>
+          <a href="#access" data-tab="access" data-admin>Access and activity</a>
+        </div>
+      </nav>
+
+      <!-- roster -->
+      <section class="view wrap" id="view-roster" hidden>
+        <div class="view-head">
+          <div><h2>Department roster</h2><p id="roster-sub">Everyone currently on the department.</p></div>
+          <div class="actions" data-admin>
+            <button class="btn btn-outline btn-sm" id="roster-import">Import from Discord</button>
+            <button class="btn btn-primary btn-sm" id="roster-add">Add member</button>
+          </div>
+        </div>
+        <div class="filters">
+          <label class="sr-only" for="roster-search">Search the roster</label>
+          <input id="roster-search" type="search" placeholder="Search by name or callsign">
+          <label class="sr-only" for="roster-rank">Filter by rank</label>
+          <select id="roster-rank"><option value="">All ranks</option></select>
+          <label class="sr-only" for="roster-division">Filter by division</label>
+          <select id="roster-division"><option value="">All divisions</option></select>
+          <label class="sr-only" for="roster-status">Filter by status</label>
+          <select id="roster-status"><option value="">All statuses</option></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Callsign</th><th>Name</th><th>Rank</th><th>Division</th><th>Status</th><th>Joined</th><th data-admin><span class="sr-only">Edit</span></th></tr></thead>
+            <tbody id="roster-body"></tbody>
+          </table>
+        </div>
+        <p class="count" id="roster-count"></p>
+      </section>
+
+      <!-- documents -->
+      <section class="view wrap" id="view-docs" hidden>
+        <div class="view-head">
+          <div><h2>Documents</h2><p id="docs-sub">Department procedures, training material, and references.</p></div>
+          <div class="actions" data-admin><button class="btn btn-primary btn-sm" id="doc-new">New document</button></div>
+        </div>
+        <div class="docs">
+          <aside class="doc-list">
+            <label class="sr-only" for="doc-search">Search documents</label>
+            <input id="doc-search" type="search" placeholder="Search documents">
+            <div id="doc-groups"></div>
+          </aside>
+          <article class="reader" id="reader">
+            <div class="empty" id="reader-empty">Pick a document from the list to read it.</div>
+          </article>
+        </div>
+      </section>
+
+      <!-- announcements (command) -->
+      <section class="view wrap" id="view-announcements" hidden>
+        <div class="view-head"><div><h2>Announcements</h2><p>Announcements appear at the top of the public home page. The newest five are shown.</p></div></div>
+        <form class="panel" id="ann-form">
+          <h3>Post an announcement</h3>
+          <div class="field"><label for="ann-title">Title</label><input id="ann-title" maxlength="120" required></div>
+          <div class="field"><label for="ann-body">Message</label><textarea id="ann-body" maxlength="2000" required></textarea></div>
+          <p class="form-error" id="ann-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit">Post announcement</button>
+        </form>
+        <div class="panel"><h3>Posted</h3><div id="ann-list"></div></div>
+      </section>
+
+      <!-- access (command) -->
+      <section class="view wrap" id="view-access" hidden>
+        <div class="view-head"><div><h2>Access and activity</h2><p>Change the access codes and see who has been using the portal.</p></div></div>
+        <form class="panel" id="codes-form">
+          <h3>Change access codes</h3>
+          <p>Leave a box empty to keep that code. Changing a code signs everyone out, including you.</p>
+          <div class="two">
+            <div class="field"><label for="code-deputy">New deputy code</label><input id="code-deputy" type="password" minlength="8" autocomplete="new-password"></div>
+            <div class="field"><label for="code-admin">New command code</label><input id="code-admin" type="password" minlength="8" autocomplete="new-password"></div>
+          </div>
+          <p class="form-error" id="codes-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit">Change codes</button>
+        </form>
+        <div class="panel"><h3>Recent activity</h3><p>The last 200 sign-ins, edits, and document views.</p><div id="audit-list"></div></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- roster editor -->
+  <dialog id="roster-dlg" aria-labelledby="roster-dlg-title">
+    <form method="dialog" id="roster-form">
+      <div class="dlg-head"><h2 id="roster-dlg-title">Add member</h2></div>
+      <div class="dlg-body">
+        <div class="two">
+          <div class="field"><label for="r-name">Name</label><input id="r-name" maxlength="60" required></div>
+          <div class="field"><label for="r-callsign">Callsign</label><input id="r-callsign" maxlength="20" placeholder="1101"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="r-rank">Rank</label><select id="r-rank"><option value="">No rank</option></select></div>
+          <div class="field"><label for="r-division">Division</label><select id="r-division"><option value="">None</option></select></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="r-status">Status</label><select id="r-status"></select></div>
+          <div class="field"><label for="r-joined">Joined</label><input id="r-joined" type="date"></div>
+        </div>
+        <div class="field"><label for="r-discord">Discord user ID</label><input id="r-discord" maxlength="25" inputmode="numeric"><p class="hint">Optional. Used to match members when importing from Discord.</p></div>
+        <div class="field"><label for="r-notes">Command notes</label><textarea id="r-notes" maxlength="1000" style="min-height:80px"></textarea><p class="hint">Only command can see these.</p></div>
+        <p class="form-error" id="roster-error" role="alert"></p>
+      </div>
+      <div class="dlg-foot">
+        <button type="button" class="btn btn-danger btn-sm" id="roster-delete">Remove from roster</button>
+        <div class="right">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="roster-save">Save member</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- document editor -->
+  <dialog id="doc-dlg" class="wide" aria-labelledby="doc-dlg-title">
+    <form method="dialog" id="doc-form">
+      <div class="dlg-head"><h2 id="doc-dlg-title">New document</h2></div>
+      <div class="dlg-body">
+        <div class="field"><label for="d-title">Title</label><input id="d-title" maxlength="150" required></div>
+        <div class="two">
+          <div class="field"><label for="d-category">Category</label><select id="d-category"></select><p class="hint">Division documents are only visible to command.</p></div>
+          <div class="field" id="d-division-field"><label for="d-division">Division</label><select id="d-division"></select></div>
+        </div>
+        <div class="editor">
+          <div class="field"><label for="d-body">Content</label><textarea id="d-body" spellcheck="true"></textarea><p class="hint">Formatting: # Heading, **bold**, *italic*, - list item, 1. numbered item, [link](https://...)</p></div>
+          <div class="field"><label>Preview</label><div class="preview prose" id="d-preview"></div></div>
+        </div>
+        <p class="form-error" id="doc-error" role="alert"></p>
+      </div>
+      <div class="dlg-foot">
+        <button type="button" class="btn btn-danger btn-sm" id="doc-delete">Delete document</button>
+        <div class="right">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="doc-save">Save document</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status"></div>
+
+  <script src="portal.js"></script>
+</body>
+</html>
