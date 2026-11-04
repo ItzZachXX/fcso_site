@@ -294,13 +294,26 @@ async function ghWrite(g, text, sha) {
   return body.content.sha;
 }
 
+// ---------- employee directory (public, built from the roster) ----------
+const EMAIL_DOMAIN = "fayettecountysheriffs.xyz";
+function emailFor(r) {
+  if (r.email) return r.email;
+  const local = r.name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9\s._-]/g, "").trim().replace(/[\s_]+/g, ".").replace(/\.{2,}/g, ".").replace(/^\.|\.$/g, "");
+  return local ? `${local}@${EMAIL_DOMAIN}` : "";
+}
+function directoryFromRoster() {
+  return sortedRoster()
+    .filter((r) => r.inDirectory !== false)
+    .map((r) => ({ id: r.id, name: r.name, callsign: r.callsign || "", rank: r.rank || "", division: r.division || "", email: emailFor(r), photo: r.photo || null }));
+}
+
 // ---------- building content.json ----------
 async function buildContent() {
   const codes = state.codes;
   if (!codes.deputy || !codes.admin) throw new Error("The access codes are missing from the content file. Contact the site developer.");
   const full = { roster: state.roster, docs: state.docs, announcements: state.announcements, codes, github: state.github };
   const deputyView = {
-    roster: state.roster.map(({ notes, ...r }) => r), // command notes stay command-only
+    roster: state.roster.map(({ notes, photo, email, inDirectory, ...r }) => r), // command notes stay command-only
     docs: state.docs.filter((d) => !d.code && d.category !== "Division").map(({ code, ...d }) => d),
   };
   // Password-protected documents: one encrypted group per password. The password itself is never written out.
@@ -318,7 +331,10 @@ async function buildContent() {
   }
   const out = {
     updated: Date.now(),
-    public: { announcements: state.announcements.slice(-5).map(({ id, title, body, at }) => ({ id, title, body, at })) },
+    public: {
+      announcements: state.announcements.slice(-5).map(({ id, title, body, at }) => ({ id, title, body, at })),
+      directory: directoryFromRoster(),
+    },
     admin: await seal(full, codes.admin),
     deputy: await seal(deputyView, codes.deputy),
     locked,
@@ -608,6 +624,67 @@ $("#roster-body").addEventListener("click", (e) => {
 $("#roster-add").addEventListener("click", () => openRosterEditor(null));
 
 let editingMember = null;
+let editingPhoto = null; // data:image/jpeg (uploaded, resized here) or an https:// link; null = department badge
+
+function showPhoto() {
+  $("#r-photo-preview").src = editingPhoto || "logo.png";
+  $("#r-photo-clear").hidden = !editingPhoto;
+}
+function updateEmailHint() {
+  const auto = emailFor({ name: $("#r-name").value.trim() || "name" });
+  $("#r-email").placeholder = auto;
+  $("#r-email-hint").textContent = `Leave empty to use ${auto}`;
+}
+$("#r-name").addEventListener("input", updateEmailHint);
+
+// Shrink uploads to a 256 x 256 square so the site stays fast.
+function resizePhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) return reject(new Error("Pick an image file (PNG, JPG, GIF or WEBP)."));
+    if (file.size > 15 * 1024 * 1024) return reject(new Error("That image is too large. Use one under 15 MB."));
+    const img = new Image();
+    img.onload = () => {
+      const size = 256;
+      const c = Object.assign(document.createElement("canvas"), { width: size, height: size });
+      const side = Math.min(img.width, img.height);
+      c.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => reject(new Error("That image couldn't be read. Try a different file."));
+    img.src = URL.createObjectURL(file);
+  });
+}
+$("#r-photo-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    editingPhoto = await resizePhoto(file);
+    $("#r-photo-url").value = "";
+    showPhoto();
+    $("#roster-error").textContent = "";
+  } catch (ex) {
+    $("#roster-error").textContent = ex.message;
+  }
+});
+$("#r-photo-url").addEventListener("change", () => {
+  const url = $("#r-photo-url").value.trim();
+  if (!url) return;
+  if (!/^https:\/\/[^\s"'<>]+$/.test(url)) return ($("#roster-error").textContent = "Image links must start with https://");
+  editingPhoto = url;
+  $("#roster-error").textContent = "";
+  showPhoto();
+});
+$("#r-photo-clear").addEventListener("click", () => {
+  editingPhoto = null;
+  $("#r-photo-url").value = "";
+  $("#r-photo-file").value = "";
+  showPhoto();
+});
+$("#r-photo-preview").addEventListener("error", () => {
+  if (editingPhoto) $("#roster-error").textContent = "That image link didn't load. Check the link, or upload the picture instead.";
+});
+
 function openRosterEditor(r) {
   editingMember = r;
   $("#roster-dlg-title").textContent = r ? `Edit ${r.name}` : "Add member";
@@ -619,6 +696,13 @@ function openRosterEditor(r) {
   $("#r-joined").value = r?.joined || new Date().toISOString().slice(0, 10);
   $("#r-discord").value = r?.discordId || "";
   $("#r-notes").value = r?.notes || "";
+  $("#r-email").value = r?.email || "";
+  $("#r-public").checked = r ? r.inDirectory !== false : true;
+  editingPhoto = r?.photo || null;
+  $("#r-photo-url").value = editingPhoto && editingPhoto.startsWith("https://") ? editingPhoto : "";
+  $("#r-photo-file").value = "";
+  showPhoto();
+  updateEmailHint();
   $("#roster-error").textContent = "";
   $("#roster-delete").hidden = !r;
   $("#roster-dlg").showModal();
@@ -638,8 +722,12 @@ $("#roster-form").addEventListener("submit", (e) => {
     joined: $("#r-joined").value,
     discordId: $("#r-discord").value.replace(/\D/g, ""),
     notes: $("#r-notes").value.trim().slice(0, 1000),
+    email: $("#r-email").value.trim().toLowerCase().slice(0, 120),
+    inDirectory: $("#r-public").checked,
+    photo: editingPhoto,
     updatedAt: Date.now(),
   };
+  if (entry.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(entry.email)) return ($("#roster-error").textContent = "That email address doesn't look right. Leave it empty to use the automatic one.");
   if (editingMember) Object.assign(editingMember, entry);
   else state.roster.push({ id: uid(), ...entry });
   $("#roster-dlg").close();
@@ -686,9 +774,33 @@ function render(md) {
       i--; out.push(`<blockquote>${q.join("<br>")}</blockquote>`); continue;
     }
     if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
-      flush(); const ordered = /^\s*\d+\./.test(line); const items = [];
-      while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) items.push(`<li>${inline(lines[i++].replace(/^\s*([-*+]|\d+\.)\s+/, ""))}</li>`);
-      i--; out.push(`<${ordered ? "ol" : "ul"}>${items.join("")}</${ordered ? "ol" : "ul"}>`); continue;
+      // Lists, including lists inside lists (indent the inner items by 2+ spaces).
+      flush(); const items = [];
+      while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) {
+        const mm = lines[i++].match(/^(\s*)([-*+]|\d+)\.?\s+(.*)$/);
+        items.push({ indent: mm[1].length, num: /\d/.test(mm[2]) ? Number(mm[2]) : null, text: mm[3] });
+      }
+      i--;
+      const build = (start) => {
+        const base = items[start].indent;
+        const ordered = items[start].num !== null;
+        let html = ordered ? `<ol${items[start].num > 1 ? ` start="${items[start].num}"` : ""}>` : "<ul>";
+        let k = start;
+        while (k < items.length && items[k].indent >= base) {
+          if (items[k].indent > base) {
+            const [inner, next] = build(k);
+            html = html.replace(/<\/li>$/, `${inner}</li>`);
+            k = next;
+          } else {
+            html += `<li>${inline(items[k].text)}</li>`;
+            k++;
+          }
+        }
+        return [html + (ordered ? "</ol>" : "</ul>"), k];
+      };
+      let k = 0;
+      while (k < items.length) { const [html, next] = build(k); out.push(html); k = next; }
+      continue;
     }
     if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
       flush(); const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
@@ -719,7 +831,7 @@ function showReaderEmpty() {
 
 function renderDocList(activeId) {
   const q = $("#doc-search").value.trim().toLowerCase();
-  const list = [...state.docs].filter((d) => !q || d.title.toLowerCase().includes(q)).sort((a, b) => a.title.localeCompare(b.title));
+  const list = [...state.docs].filter((d) => !q || d.title.toLowerCase().includes(q)).sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
   const groups = {};
   for (const d of list) (groups[groupKey(d)] ||= []).push(d);
   // Locked documents (not command): shown under their category, opened with a password. Titles stay hidden.

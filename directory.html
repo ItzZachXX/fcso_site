@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Employee Directory | Fayette County Sheriff's Office</title>
+  <meta name="description" content="Find a member of the Fayette County Sheriff's Office by name, rank, or callsign.">
+  <meta name="theme-color" content="#141b3d">
+  <link rel="icon" href="logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4">
+  <style>
+    .dir-head { background: var(--khaki); padding: 48px 0 0; overflow: hidden; }
+    .dir-stripe { --gutter: max(16px, calc((100vw - var(--wrap)) / 2)); margin: 0 0 0 calc(var(--gutter) * -1); padding: 14px 56px 14px var(--gutter); width: min(100vw, calc(var(--gutter) + 640px)); background: var(--blue); clip-path: polygon(0 0, 100% 0, 100% 14%, 86% 100%, 0 100%); position: relative; }
+    .dir-stripe::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 3px; background: var(--white); }
+    .dir-stripe h1 { margin: 6px 0 0; color: var(--white); font-style: italic; text-transform: uppercase; font-size: clamp(2.2rem, 5.5vw, 3.6rem); line-height: 0.95; }
+    .dir-intro { padding: 18px 0 30px; max-width: 60ch; color: var(--ink); }
+    .dir-tools { display: flex; flex-wrap: wrap; gap: 10px; margin: 32px 0 8px; }
+    .dir-tools input { flex: 2 1 240px; }
+    .dir-tools select { flex: 1 1 180px; width: auto; }
+    .tier { margin-top: 36px; }
+    .tier h2 { font-size: 1.7rem; padding-bottom: 8px; border-bottom: 2px solid var(--ink); margin-bottom: 18px; }
+    .people { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 14px; }
+    .person { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; grid-template-columns: 64px 1fr; gap: 14px; align-items: center; }
+    .person img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; background: var(--paper); border: 2px solid var(--khaki); }
+    .person .who { min-width: 0; }
+    .person .name { font-weight: 700; font-size: 1.05rem; line-height: 1.25; overflow-wrap: anywhere; }
+    .person .meta { color: var(--ink-soft); font-size: 0.9rem; }
+    .person .callsign { display: inline-block; font-weight: 700; color: var(--blue-deep); font-variant-numeric: tabular-nums; margin-right: 6px; }
+    .person a { font-size: 0.84rem; overflow-wrap: anywhere; }
+    .empty { padding: 48px 0; color: var(--ink-soft); }
+    .count { color: var(--ink-soft); font-size: 0.9rem; margin-top: 28px; }
+    main { padding-bottom: 72px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="./">
+        <img src="logo.png" alt="">
+        <span>Fayette County Sheriff's Office<small>Kentucky State Roleplay</small></span>
+      </a>
+      <button class="nav-toggle" aria-expanded="false" aria-controls="nav">Menu</button>
+      <nav class="nav" id="nav" aria-label="Main">
+        <a href="./#about">About</a>
+        <a href="./#divisions">Divisions</a>
+        <a href="directory.html" aria-current="page">Directory</a>
+        <a href="./#join">Join</a>
+        <a class="nav-portal" href="portal.html">Deputy portal</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="dir-head">
+    <div class="wrap">
+      <div class="dir-stripe"><h1>Employee Directory</h1></div>
+      <p class="dir-intro">Every member of the Fayette County Sheriff's Office, from the Office of the Sheriff down. Search by name or callsign, or filter by rank.</p>
+    </div>
+  </section>
+
+  <main class="wrap">
+    <div class="dir-tools">
+      <label class="sr-only" for="q">Search the directory</label>
+      <input id="q" type="search" placeholder="Search by name or callsign">
+      <label class="sr-only" for="rank">Filter by rank</label>
+      <select id="rank"><option value="">All ranks</option></select>
+    </div>
+    <div id="list"><p class="empty">Loading the directory...</p></div>
+    <p class="count" id="count"></p>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <div>&copy; <span id="year">2026</span> fayettecountysheriffs.xyz. A Kentucky State Roleplay department, not affiliated with any real agency.</div>
+      <div class="footer-links">
+        <a href="https://discord.gg/nMPwQ7AFHk" target="_blank" rel="noopener">Discord</a>
+        <a href="directory.html">Directory</a>
+        <a href="portal.html">Deputy portal</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="directory.js?v=1"></script>
+</body>
+</html>
