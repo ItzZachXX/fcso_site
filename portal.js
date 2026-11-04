@@ -1,941 +1,347 @@
-// Deputy portal (standalone: GitHub Pages only, no bot or server).
-//
-// content.json holds everything, encrypted with AES-256-GCM:
-//   admin   - the full copy, opened with the command code
-//   deputy  - the deputy copy (no command notes, no password or division-only documents), opened with the deputy code
-//   locked  - password-protected documents, one group per password
-// Command's edits save automatically by updating content.json in the GitHub repo through the GitHub API.
-// The GitHub token lives inside the command copy, so only someone with the command code can save.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deputy Portal | Fayette County Sheriff's Office</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#141b3d">
+  <link rel="icon" href="logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700&family=Public+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4">
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1; }
 
-// If anything fails while loading, say so on the sign-in box instead of leaving a blank page.
-window.addEventListener("error", () => {
-  const box = document.getElementById("login");
-  const err = document.getElementById("login-error");
-  if (box && document.getElementById("app")?.hidden !== false) box.hidden = false;
-  if (err && !err.textContent) err.textContent = "The portal didn't load correctly. Press Ctrl + F5 to reload it. If that doesn't help, the site files may be out of date.";
-});
+    /* ---------- sign in ---------- */
+    .login { display: grid; place-items: center; padding: 64px 16px; }
+    .login-card { width: min(440px, 100%); background: var(--white); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 40px -24px rgba(20, 27, 61, 0.45); }
+    .login-head { background: var(--khaki); padding: 26px 28px 0; }
+    .login-head img { width: 64px; height: 64px; }
+    .login-stripe { margin: 16px -28px 0; padding: 12px 28px; background: var(--blue); clip-path: polygon(0 0, 100% 0, 100% 20%, 90% 100%, 0 100%); position: relative; }
+    .login-stripe::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 2px; background: var(--white); }
+    .login-stripe h1 { margin: 4px 0 0; color: var(--white); font-style: italic; text-transform: uppercase; font-size: 2rem; }
+    .login-body { padding: 26px 28px 28px; }
+    .login-body p { color: var(--ink-soft); font-size: 0.95rem; }
+    .login-body .btn { width: 100%; }
+    .login-foot { margin-top: 18px; text-align: center; font-size: 0.9rem; }
 
-const RANKS = [
-  ["Sheriff", "High Command"], ["Chief Deputy", "High Command"], ["Major", "High Command"],
-  ["Commander", "Department Command Staff"], ["Captain", "Department Command Staff"], ["Lieutenant", "Department Command Staff"],
-  ["Sergeant", "Supervisory Board"],
-  ["Corporal", "Patrol Staff"], ["Master Deputy", "Patrol Staff"], ["Deputy First Class", "Patrol Staff"], ["Deputy", "Patrol Staff"], ["Probationary Deputy", "Patrol Staff"],
-  ["Cadet", "Cadets"],
-].map(([name, tier]) => ({ name, tier }));
-const DIVISIONS = ["Special Operations Division", "Traffic Services Division", "Criminal Investigations Unit", "Internal Affairs Division", "Field Training Division", "Public Relations Division"];
-const CATEGORIES = ["General", "Standard Operating Procedures", "Training", "Division"];
-const STATUSES = ["Active", "Leave of Absence", "Reduced Activity", "Suspended", "Probationary"];
+    /* ---------- app shell ---------- */
+    .session { display: flex; align-items: center; gap: 12px; color: rgba(255, 255, 255, 0.8); font-size: 0.9rem; }
+    .session b { color: var(--white); }
+    .session .btn-quiet { color: rgba(255, 255, 255, 0.8); }
+    .session .btn-quiet:hover { color: var(--white); background: rgba(255, 255, 255, 0.1); }
+    .access-tag { font-size: 0.78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--khaki); color: var(--ink); }
+    .access-tag.admin { background: var(--blue); color: var(--white); }
 
-const CONTENT_FILE = "content.json";
-const SESSION_KEY = "fcso_portal";
-const DRAFT_KEY = "fcso_draft";
-const SAVE_DELAY = 2500;
+    .tabs { background: var(--white); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 4; }
+    .tabs .wrap { display: flex; gap: 4px; overflow-x: auto; }
+    .tabs a { padding: 16px 16px 13px; text-decoration: none; color: var(--ink-soft); font-weight: 600; border-bottom: 3px solid transparent; white-space: nowrap; }
+    .tabs a:hover { color: var(--ink); }
+    .tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--blue); }
 
-const $ = (s, root = document) => root.querySelector(s);
-const $$ = (s, root = document) => [...root.querySelectorAll(s)];
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const uid = () => [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    .view { padding: 36px 0 64px; }
+    .view-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+    .view-head h2 { margin: 0; }
+    .view-head p { margin: 4px 0 0; color: var(--ink-soft); }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
-let file = null; // the parsed content.json
-let fileSha = null; // GitHub's version id for content.json (command only)
-let session = null; // { role, name, code, docCodes, unlocked }
-let state = null; // admin: { roster, docs, announcements, codes, github }   others: { roster, docs }
-let currentDoc = null;
-const isAdmin = () => session?.role === "admin";
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .filters input { flex: 2 1 220px; }
+    .filters select { flex: 1 1 160px; width: auto; }
 
-// ---------- encoding ----------
-function toB64(buf) {
-  const bytes = new Uint8Array(buf);
-  let s = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-const textToB64 = (t) => toB64(new TextEncoder().encode(t));
-const b64ToText = (b) => new TextDecoder().decode(fromB64(b.replace(/\s/g, "")));
+    /* roster table */
+    .table-wrap { background: var(--white); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    th { font-size: 0.82rem; color: var(--ink-soft); background: var(--paper); font-weight: 700; }
+    tr:last-child td { border-bottom: 0; }
+    td.callsign { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .status { font-size: 0.82rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #e3f1e9; color: var(--ok); white-space: nowrap; }
+    .status.leave, .status.reduced { background: #fbf0d9; color: #845a06; }
+    .status.suspended { background: #f9e1e3; color: var(--danger); }
+    .status.probationary { background: #e3e8fb; color: var(--blue-deep); }
+    .empty { padding: 40px 20px; text-align: center; color: var(--ink-soft); }
+    .count { color: var(--ink-soft); font-size: 0.9rem; margin-top: 10px; }
 
-// ---------- crypto ----------
-async function keyFor(code, salt, iterations) {
-  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-}
-async function seal(obj, code) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const iterations = 250000;
-  const key = await keyFor(code, salt, iterations);
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
-  return { salt: toB64(salt), iv: toB64(iv), iterations, ct: toB64(ct) };
-}
-async function unseal(box, code) {
-  const key = await keyFor(code, fromB64(box.salt), box.iterations);
-  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(box.iv) }, key, fromB64(box.ct));
-  return JSON.parse(new TextDecoder().decode(pt));
-}
+    /* documents */
+    .docs { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: start; }
+    .doc-list { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 8px; position: sticky; top: 70px; max-height: calc(100vh - 100px); overflow-y: auto; }
+    .doc-list input { margin-bottom: 8px; }
+    .doc-group h3 { font-family: var(--body); font-size: 0.82rem; font-weight: 700; color: var(--ink-soft); margin: 12px 8px 6px; line-height: 1.3; }
+    .doc-group a { display: block; padding: 8px 10px; border-radius: var(--radius); text-decoration: none; color: var(--ink); font-size: 0.95rem; }
+    .doc-group a:hover { background: var(--paper); }
+    .doc-group a[aria-current="true"] { background: rgba(43, 71, 201, 0.1); color: var(--blue-deep); font-weight: 600; }
+    .doc-group a.locked { color: var(--ink-soft); display: flex; justify-content: space-between; gap: 8px; }
+    .lock-tag { font-size: 0.75rem; font-weight: 700; color: var(--ink-soft); background: var(--paper); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; white-space: nowrap; align-self: center; }
+    .unlock { max-width: 420px; margin: 24px auto; text-align: left; }
+    .unlock h2 { font-size: 1.8rem; }
+    .unlock p { color: var(--ink-soft); }
+    .code-row { display: flex; gap: 8px; }
+    .code-row input { flex: 1; }
+    .doc-code { font-weight: 600; color: var(--ink); background: var(--khaki-pale); padding: 2px 8px; border-radius: 4px; }
+    .reader { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 36px clamp(20px, 4vw, 48px) 48px; position: relative; min-height: 360px; overflow: hidden; }
+    .reader-meta { color: var(--ink-soft); font-size: 0.88rem; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center; }
+    .reader h1.doc-title { font-size: clamp(2rem, 4vw, 2.8rem); font-style: italic; margin-bottom: 6px; }
+    .prose { max-width: 72ch; }
+    .prose h1, .prose h2, .prose h3 { margin-top: 1.4em; font-style: normal; }
+    .prose h1 { font-size: 2rem; } .prose h2 { font-size: 1.6rem; } .prose h3 { font-size: 1.3rem; }
+    .prose table { margin: 1em 0; border: 1px solid var(--line); }
+    .prose blockquote { margin: 1em 0; padding: 8px 16px; border-left: 4px solid var(--khaki); background: var(--khaki-pale); }
+    .prose code { background: var(--paper); padding: 1px 5px; border-radius: 4px; font-size: 0.92em; }
+    .prose img { border-radius: var(--radius); }
+    @media (max-width: 900px) { .docs { grid-template-columns: 1fr; } .doc-list { position: static; max-height: none; } }
 
-// ---------- loading content ----------
-async function loadFile() {
-  const res = await fetch(`${CONTENT_FILE}?t=${Date.now()}`, { cache: "no-store" }).catch(() => null);
-  if (!res || !res.ok) throw new Error("The portal's content file (content.json) couldn't be loaded. Make sure it's uploaded to the site.");
-  file = await res.json();
-  return file;
-}
+    /* deputy copy protection + watermark */
+    body.locked .reader, body.locked .table-wrap { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    .watermark { position: absolute; inset: 0; pointer-events: none; opacity: 0.07; background-repeat: repeat; z-index: 1; }
+    .reader > *:not(.watermark) { position: relative; z-index: 2; }
+    @media print { body.locked main, body.locked header, body.locked nav { display: none !important; } body.locked::before { content: "Printing department documents is not allowed."; display: block; padding: 40px; font: 600 20px var(--body); } }
 
-async function unlock(code) {
-  try {
-    return { role: "admin", data: await unseal(file.admin, code) };
-  } catch {}
-  try {
-    return { role: "deputy", data: await unseal(file.deputy, code) };
-  } catch {}
-  const groups = await unlockGroups(code);
-  if (groups.length) return { role: "division", data: { roster: [], docs: [] }, groups };
-  throw new Error("That code isn't valid.");
-}
+    /* panels */
+    .panel { background: var(--white); border: 1px solid var(--line); border-radius: 8px; padding: 24px; margin-bottom: 24px; }
+    .panel h3 { margin-bottom: 6px; }
+    .panel > p { color: var(--ink-soft); }
+    .ann-item, .audit-item { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+    .ann-item:first-child, .audit-item:first-child { border-top: 0; }
+    .ann-item p { margin: 4px 0 0; white-space: pre-line; color: var(--ink-soft); }
+    .audit-item { font-size: 0.92rem; padding: 10px 0; }
+    .audit-item time { color: var(--ink-soft); white-space: nowrap; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
 
-// Password-protected documents are published in groups, one per password.
-async function unlockGroups(code) {
-  const opened = [];
-  for (const [i, g] of (file?.locked || []).entries()) {
-    try {
-      opened.push({ index: i, docs: (await unseal(g.box, code)).docs });
-    } catch {}
-  }
-  return opened;
-}
-const lockedGroups = () => (file?.locked || []).map((g, index) => ({ ...g, index })).filter((g) => !session.unlocked.has(g.index));
-function addUnlocked(groups) {
-  for (const g of groups) {
-    if (session.unlocked.has(g.index)) continue;
-    session.unlocked.add(g.index);
-    for (const d of g.docs) state.docs.push({ ...d, unlockedByPassword: true });
-  }
-}
+    /* dialogs */
+    dialog { border: 0; border-radius: 10px; padding: 0; width: min(560px, calc(100% - 32px)); box-shadow: 0 30px 70px -20px rgba(10, 14, 35, 0.5); color: var(--ink); }
+    dialog.wide { width: min(1100px, calc(100% - 32px)); }
+    dialog::backdrop { background: rgba(10, 14, 35, 0.55); }
+    .dlg-head { padding: 20px 24px 0; display: flex; justify-content: space-between; align-items: center; }
+    .dlg-head h2 { font-size: 1.9rem; margin: 0; }
+    .dlg-body { padding: 18px 24px 8px; max-height: calc(100vh - 220px); overflow-y: auto; }
+    .dlg-foot { padding: 14px 24px 22px; display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .dlg-foot .right { display: flex; gap: 10px; margin-left: auto; }
+    .editor { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .editor textarea { min-height: 420px; font-family: ui-monospace, Consolas, monospace; font-size: 0.92rem; }
+    .editor .preview { border: 1.5px solid var(--line); border-radius: var(--radius); padding: 12px 16px; max-height: 452px; overflow-y: auto; }
+    @media (max-width: 860px) { .editor { grid-template-columns: 1fr; } }
 
-// ---------- ui helpers ----------
-function toast(message, error = false) {
-  const t = $("#toast");
-  t.textContent = message;
-  t.classList.toggle("error", error);
-  t.classList.add("show");
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => t.classList.remove("show"), 3600);
-}
-const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-const fmtDateTime = (ts) => new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-
-// ---------- session ----------
-function signOut(message) {
-  session = null;
-  state = null;
-  fileSha = null;
-  clearTimeout(saveTimer);
-  try { sessionStorage.removeItem(SESSION_KEY); } catch {}
-  document.body.classList.remove("locked");
-  $("#app").hidden = true;
-  $("#session").hidden = true;
-  $("#login").hidden = false;
-  $("#login-error").textContent = message || "";
-  history.replaceState(null, "", location.pathname);
-}
-$("#signout").addEventListener("click", async () => {
-  if (saveState.pending || saveState.saving) {
-    toast("Saving your last change first...");
-    await saveNow();
-    if (saveState.error && !confirm("Your last change didn't save. It's kept in this browser and will be offered next time you sign in. Sign out anyway?")) return;
-  }
-  signOut();
-});
-
-async function signIn(name, code, docCodes = []) {
-  if (!file) await loadFile();
-  let result = await unlock(code);
-  session = { role: result.role, name, code, docCodes: [], unlocked: new Set() };
-  state = result.data;
-
-  if (isAdmin()) {
-    // With GitHub connected, read the newest saved version straight from GitHub (the site itself can lag a minute behind).
-    if (state.github?.token) {
-      try {
-        const latest = await ghRead(state.github);
-        const data = await unseal(latest.json.admin, code);
-        file = latest.json;
-        fileSha = latest.sha;
-        state = data;
-      } catch (ex) {
-        setSaveStatus("error", `Couldn't reach GitHub: ${ex.message}`);
-      }
-    }
-    state.roster ||= [];
-    state.docs ||= [];
-    state.announcements ||= file.public?.announcements || [];
-    state.codes ||= { admin: code, deputy: null };
-    state.github ||= null;
-    await restoreDraft();
-  } else {
-    state.roster ||= [];
-    state.docs ||= [];
-    if (result.groups) addUnlocked(result.groups);
-    for (const c of docCodes) {
-      const g = await unlockGroups(c);
-      if (g.length) { addUnlocked(g); session.docCodes.push(c); }
-    }
-  }
-  rememberSession();
-  startApp();
-}
-
-function rememberSession() {
-  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ name: session.name, code: session.code, docCodes: session.docCodes })); } catch {}
-}
-
-$("#login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const name = $("#login-name").value.trim();
-  const code = $("#login-code").value.trim();
-  const err = $("#login-error");
-  if (!name) return (err.textContent = "Enter your name or callsign.");
-  if (!code) return (err.textContent = "Enter your access code.");
-  const btn = $("#login-btn");
-  btn.disabled = true;
-  btn.textContent = "Unlocking...";
-  err.textContent = "";
-  try {
-    await loadFile();
-    await signIn(name, code);
-    $("#login-code").value = "";
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Sign in";
-  }
-});
-
-function startApp() {
-  $("#login").hidden = true;
-  $("#app").hidden = false;
-  $("#session").hidden = false;
-  $("#who").textContent = session.name;
-  const tag = $("#access");
-  tag.textContent = { admin: "Command access", deputy: "Deputy access", division: "Document access" }[session.role];
-  tag.classList.toggle("admin", isAdmin());
-  $$("[data-admin]").forEach((el) => (el.hidden = !isAdmin()));
-  $("#save-status").hidden = !isAdmin();
-  $('#tabs a[data-tab="roster"]').hidden = session.role === "division";
-  document.body.classList.toggle("locked", !isAdmin());
-  $("#docs-sub").textContent = isAdmin()
-    ? "Every document. You can create and edit them, and set a password on any document."
-    : session.role === "division"
-      ? "The documents your password unlocks. Documents are read-only."
-      : "Department procedures, training material, and references. Locked documents open with their own password. Documents are read-only.";
-  fillSelects();
-  if (isAdmin()) {
-    fillGithubForm();
-    if (!saveState.pending && !saveState.error) setSaveStatus(state.github?.token ? "saved" : "offline");
-  }
-  route();
-}
-
-window.addEventListener("hashchange", route);
-function route() {
-  if (!session) return;
-  let [tab, arg] = location.hash.replace("#", "").split("/");
-  const tabs = isAdmin() ? ["roster", "docs", "announcements", "saving"] : session.role === "division" ? ["docs"] : ["roster", "docs"];
-  if (!tabs.includes(tab)) tab = tabs[0];
-  $$(".view").forEach((v) => (v.hidden = v.id !== `view-${tab}`));
-  $$("#tabs a").forEach((a) => (a.dataset.tab === tab ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
-  ({ roster: renderRoster, docs: () => showDocs(arg), announcements: renderAnnouncements, saving: renderSaving })[tab]();
-}
-
-// ---------- GitHub storage ----------
-const ghUrl = (g) => `https://api.github.com/repos/${encodeURIComponent(g.owner)}/${encodeURIComponent(g.repo)}/contents/${CONTENT_FILE}`;
-const ghHeaders = (g, extra = {}) => ({ Authorization: `Bearer ${g.token}`, "X-GitHub-Api-Version": "2022-11-28", ...extra });
-
-function ghProblem(status, body) {
-  if (status === 401) return "GitHub rejected the access token. It may have expired. Add a new one on the Saving tab.";
-  if (status === 403) return body?.message?.includes("rate limit") ? "GitHub's rate limit was hit. Try again in a few minutes." : "The access token isn't allowed to edit this repository. Check its permissions.";
-  if (status === 404) return "GitHub couldn't find that repository or branch. Check the details on the Saving tab.";
-  return body?.message || `GitHub returned an error (${status}).`;
-}
-
-async function ghRead(g) {
-  const res = await fetch(`${ghUrl(g)}?ref=${encodeURIComponent(g.branch || "main")}&t=${Date.now()}`, { headers: ghHeaders(g, { Accept: "application/vnd.github+json" }), cache: "no-store" });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(ghProblem(res.status, body));
-  let text = body.content ? b64ToText(body.content) : null;
-  if (!text) {
-    // Files over 1 MB come back without content; fetch the raw file instead.
-    const raw = await fetch(`${ghUrl(g)}?ref=${encodeURIComponent(g.branch || "main")}`, { headers: ghHeaders(g, { Accept: "application/vnd.github.raw+json" }), cache: "no-store" });
-    if (!raw.ok) throw new Error(ghProblem(raw.status));
-    text = await raw.text();
-  }
-  return { sha: body.sha, json: JSON.parse(text) };
-}
-
-async function ghWrite(g, text, sha) {
-  const res = await fetch(ghUrl(g), {
-    method: "PUT",
-    headers: ghHeaders(g, { Accept: "application/vnd.github+json", "Content-Type": "application/json" }),
-    body: JSON.stringify({ message: `Portal update by ${session.name}`, content: textToB64(text), branch: g.branch || "main", ...(sha ? { sha } : {}) }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 409 || res.status === 422) {
-    const e = new Error("conflict");
-    e.conflict = true;
-    throw e;
-  }
-  if (!res.ok) throw new Error(ghProblem(res.status, body));
-  return body.content.sha;
-}
-
-// ---------- building content.json ----------
-async function buildContent() {
-  const codes = state.codes;
-  if (!codes.deputy || !codes.admin) throw new Error("The access codes are missing from the content file. Contact the site developer.");
-  const full = { roster: state.roster, docs: state.docs, announcements: state.announcements, codes, github: state.github };
-  const deputyView = {
-    roster: state.roster.map(({ notes, ...r }) => r), // command notes stay command-only
-    docs: state.docs.filter((d) => !d.code && d.category !== "Division").map(({ code, ...d }) => d),
-  };
-  // Password-protected documents: one encrypted group per password. The password itself is never written out.
-  const byCode = new Map();
-  for (const d of state.docs) {
-    if (!d.code) continue;
-    if (!byCode.has(d.code)) byCode.set(d.code, []);
-    const { code, ...doc } = d;
-    byCode.get(d.code).push(doc);
-  }
-  const locked = [];
-  for (const [code, docs] of byCode) {
-    const labels = [...new Set(docs.map((d) => (d.category === "Division" ? `Division: ${d.division || "Unassigned"}` : d.category)))];
-    locked.push({ labels, count: docs.length, box: await seal({ docs }, code) });
-  }
-  const out = {
-    updated: Date.now(),
-    public: { announcements: state.announcements.slice(-5).map(({ id, title, body, at }) => ({ id, title, body, at })) },
-    admin: await seal(full, codes.admin),
-    deputy: await seal(deputyView, codes.deputy),
-    locked,
-  };
-  return { json: out, text: JSON.stringify(out) };
-}
-
-// ---------- saving ----------
-const saveState = { pending: false, saving: false, error: null, lastSaved: null };
-let saveTimer = null;
-
-function setSaveStatus(kind, message) {
-  const el = $("#save-status");
-  if (!el) return;
-  el.classList.remove("saving", "error");
-  if (kind === "saving") { el.textContent = "Saving..."; el.classList.add("saving"); }
-  else if (kind === "pending") { el.textContent = "Unsaved changes"; el.classList.add("saving"); }
-  else if (kind === "error") { el.textContent = "Not saved"; el.classList.add("error"); saveState.error = message; }
-  else if (kind === "offline") { el.textContent = "Saving not set up"; el.classList.add("error"); }
-  else { el.textContent = "All changes saved"; saveState.error = null; }
-  el.title = message || "";
-  if (location.hash === "#saving") renderSaving();
-}
-
-// Called after every edit.
-function changed() {
-  saveState.pending = true;
-  writeDraft();
-  if (!state.github?.token) {
-    setSaveStatus("offline");
-    return;
-  }
-  setSaveStatus("pending");
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveNow, SAVE_DELAY);
-}
-
-async function saveNow() {
-  clearTimeout(saveTimer);
-  if (!isAdmin() || !state.github?.token) return;
-  if (saveState.saving) {
-    saveState.again = true;
-    return;
-  }
-  saveState.saving = true;
-  saveState.pending = false;
-  setSaveStatus("saving");
-  try {
-    const { json, text } = await buildContent();
-    try {
-      fileSha = await ghWrite(state.github, text, fileSha || (await ghRead(state.github).catch(() => ({}))).sha);
-    } catch (ex) {
-      if (!ex.conflict) throw ex;
-      await resolveConflict();
-      const rebuilt = await buildContent();
-      fileSha = await ghWrite(state.github, rebuilt.text, fileSha);
-    }
-    file = json;
-    state._deleted = [];
-    saveState.lastSaved = Date.now();
-    clearDraft();
-    setSaveStatus("saved");
-  } catch (ex) {
-    saveState.pending = true;
-    setSaveStatus("error", ex.message);
-    toast(`Not saved: ${ex.message}`, true);
-  } finally {
-    saveState.saving = false;
-    if (saveState.again) {
-      saveState.again = false;
-      saveNow();
-    }
-  }
-}
-
-// Someone else saved since this page loaded. Keep both sets of edits where possible:
-// their version is the base, and anything this person changed more recently replaces it.
-async function resolveConflict() {
-  const latest = await ghRead(state.github);
-  const theirs = await unseal(latest.json.admin, session.code);
-  const mergeList = (mine, other, key = "id") => {
-    const map = new Map(other.map((x) => [x[key], x]));
-    for (const m of mine) {
-      const o = map.get(m[key]);
-      if (!o || (m.updatedAt || m.at || 0) >= (o.updatedAt || o.at || 0)) map.set(m[key], m);
-    }
-    for (const id of state._deleted || []) map.delete(id);
-    return [...map.values()];
-  };
-  state.roster = mergeList(state.roster, theirs.roster || []);
-  state.docs = mergeList(state.docs, theirs.docs || []);
-  state.announcements = mergeList(state.announcements, theirs.announcements || []).sort((a, b) => a.at - b.at);
-  state.github = state.github || theirs.github;
-  fileSha = latest.sha;
-  toast("Another command member saved at the same time. Both sets of changes were kept.");
-}
-
-const forget = (id) => { (state._deleted ||= []).push(id); };
-
-// ---------- drafts: unsaved edits kept (encrypted) in this browser until they save ----------
-let draftKey = null;
-async function writeDraft() {
-  try {
-    if (!draftKey || draftKey.code !== session.code) {
-      const salt = crypto.getRandomValues(new Uint8Array(16));
-      draftKey = { code: session.code, salt, key: await keyFor(session.code, salt, 250000) };
-    }
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, draftKey.key, new TextEncoder().encode(JSON.stringify(state)));
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ base: file?.updated || 0, at: Date.now(), box: { salt: toB64(draftKey.salt), iv: toB64(iv), iterations: 250000, ct: toB64(ct) } }));
-  } catch {}
-}
-function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch {}
-}
-async function restoreDraft() {
-  let draft;
-  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY)); } catch {}
-  if (!draft) return;
-  let data;
-  try { data = await unseal(draft.box, session.code); } catch { return; }
-  if (!confirm(`This browser has changes from ${fmtDateTime(draft.at)} that never saved. Restore them now? (Cancel throws them away.)`)) {
-    clearDraft();
-    return;
-  }
-  data.github = data.github || state.github;
-  data.codes = state.codes;
-  state = data;
-  saveState.pending = true;
-  setTimeout(() => (state.github?.token ? saveNow() : setSaveStatus("offline")), 0);
-}
-
-window.addEventListener("beforeunload", (e) => {
-  if (isAdmin() && (saveState.pending || saveState.saving)) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-});
-
-// ---------- saving tab ----------
-function renderSaving() {
-  if (!isAdmin()) return;
-  const connected = !!state.github?.token;
-  let title, detail;
-  if (!connected) {
-    title = "Saving isn't set up yet";
-    detail = "Connect the portal to GitHub below and every change will save to the website automatically. Until then, changes are only kept in this browser.";
-  } else if (saveState.saving) {
-    title = "Saving...";
-    detail = "Writing your changes to the website.";
-  } else if (saveState.error) {
-    title = "Your last change didn't save";
-    detail = `${saveState.error} Your changes are kept in this browser. Fix the problem and press Save now.`;
-  } else if (saveState.pending) {
-    title = "Unsaved changes";
-    detail = "Your changes will save in a moment.";
-  } else {
-    title = "All changes saved";
-    detail = saveState.lastSaved ? `Last saved ${fmtDateTime(saveState.lastSaved)}. Deputies see changes about a minute after saving.` : "Everything here matches the website.";
-  }
-  $("#saving-state").textContent = title;
-  $("#saving-detail").textContent = detail;
-  $("#save-now").hidden = !connected;
-}
-
-function fillGithubForm() {
-  const g = state.github || {};
-  $("#gh-owner").value = g.owner || "";
-  $("#gh-repo").value = g.repo || "";
-  $("#gh-branch").value = g.branch || "main";
-  $("#gh-token").value = "";
-  $("#gh-token-hint").textContent = g.token ? "A token is saved. Leave empty to keep it." : "Paste the fine-grained token you created on GitHub.";
-}
-
-$("#gh-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const err = $("#gh-error");
-  const g = {
-    owner: $("#gh-owner").value.trim(),
-    repo: $("#gh-repo").value.trim(),
-    branch: $("#gh-branch").value.trim() || "main",
-    token: $("#gh-token").value.trim() || state.github?.token || "",
-  };
-  if (!g.owner || !g.repo) return (err.textContent = "Enter the GitHub username and the repository name.");
-  if (!g.token) return (err.textContent = "Paste an access token.");
-  err.textContent = "";
-  const btn = $("#gh-save");
-  btn.disabled = true;
-  btn.textContent = "Connecting...";
-  try {
-    let sha = null;
-    try {
-      sha = (await ghRead(g)).sha;
-    } catch (ex) {
-      if (!/couldn't find/.test(ex.message)) throw ex; // a missing content.json is fine; it gets created
-    }
-    state.github = g;
-    fileSha = sha;
-    fillGithubForm();
-    toast("Connected to GitHub. Saving now.");
-    await saveNow();
-  } catch (ex) {
-    err.textContent = ex.message;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Connect and save";
-  }
-});
-
-$("#save-now").addEventListener("click", () => saveNow());
-
-$("#save-download").addEventListener("click", async () => {
-  try {
-    const { text } = await buildContent();
-    const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: CONTENT_FILE });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    toast("Backup copy downloaded. It's locked with the access codes like the live one.");
-  } catch (ex) {
-    toast(ex.message, true);
-  }
-});
-
-// ---------- selects ----------
-function options(el, values, keepFirst = true) {
-  const first = keepFirst ? el.options[0]?.outerHTML || "" : "";
-  el.innerHTML = first + values.map((v) => `<option>${esc(v)}</option>`).join("");
-}
-function fillSelects() {
-  options($("#roster-rank"), RANKS.map((r) => r.name));
-  options($("#roster-division"), DIVISIONS);
-  options($("#roster-status"), STATUSES);
-  options($("#r-rank"), RANKS.map((r) => r.name));
-  options($("#r-division"), DIVISIONS);
-  options($("#r-status"), STATUSES, false);
-  options($("#d-category"), CATEGORIES, false);
-  options($("#d-division"), DIVISIONS, false);
-}
-
-// ---------- roster ----------
-const statusClass = (s) => ({ "Leave of Absence": "leave", "Reduced Activity": "reduced", Suspended: "suspended", Probationary: "probationary" })[s] || "";
-const rankOrder = (name) => { const i = RANKS.findIndex((r) => r.name === name); return i === -1 ? 999 : i; };
-const sortedRoster = () => [...state.roster].sort((a, b) => rankOrder(a.rank) - rankOrder(b.rank) || a.name.localeCompare(b.name));
-
-function renderRoster() {
-  const roster = sortedRoster();
-  const q = $("#roster-search").value.trim().toLowerCase();
-  const rank = $("#roster-rank").value;
-  const division = $("#roster-division").value;
-  const status = $("#roster-status").value;
-  const list = roster.filter(
-    (r) =>
-      (!q || r.name.toLowerCase().includes(q) || (r.callsign || "").toLowerCase().includes(q)) &&
-      (!rank || r.rank === rank) && (!division || r.division === division) && (!status || r.status === status)
-  );
-  const cols = isAdmin() ? 7 : 6;
-  if (!roster.length) {
-    $("#roster-body").innerHTML = `<tr><td colspan="${cols}" class="empty">${isAdmin() ? "The roster is empty. Add your first member with Add member." : "The roster hasn't been filled in yet."}</td></tr>`;
-  } else if (!list.length) {
-    $("#roster-body").innerHTML = `<tr><td colspan="${cols}" class="empty">No members match those filters.</td></tr>`;
-  } else {
-    $("#roster-body").innerHTML = list
-      .map(
-        (r) => `<tr>
-          <td class="callsign">${esc(r.callsign) || "-"}</td>
-          <td>${esc(r.name)}</td>
-          <td>${esc(r.rank) || "-"}</td>
-          <td>${esc(r.division) || "-"}</td>
-          <td><span class="status ${statusClass(r.status)}">${esc(r.status)}</span></td>
-          <td>${r.joined ? esc(fmtDate(r.joined + "T12:00:00")) : "-"}</td>
-          ${isAdmin() ? `<td><button class="btn btn-quiet btn-sm" data-edit="${esc(r.id)}">Edit</button></td>` : ""}
-        </tr>`
-      )
-      .join("");
-  }
-  $("#roster-count").textContent = roster.length ? `Showing ${list.length} of ${roster.length} members.` : "";
-}
-["#roster-search", "#roster-rank", "#roster-division", "#roster-status"].forEach((s) => $(s).addEventListener("input", renderRoster));
-
-$("#roster-body").addEventListener("click", (e) => {
-  const id = e.target.closest("[data-edit]")?.dataset.edit;
-  if (id) openRosterEditor(state.roster.find((r) => r.id === id));
-});
-$("#roster-add").addEventListener("click", () => openRosterEditor(null));
-
-let editingMember = null;
-function openRosterEditor(r) {
-  editingMember = r;
-  $("#roster-dlg-title").textContent = r ? `Edit ${r.name}` : "Add member";
-  $("#r-name").value = r?.name || "";
-  $("#r-callsign").value = r?.callsign || "";
-  $("#r-rank").value = r?.rank || "";
-  $("#r-division").value = r?.division || "";
-  $("#r-status").value = r?.status || "Active";
-  $("#r-joined").value = r?.joined || new Date().toISOString().slice(0, 10);
-  $("#r-discord").value = r?.discordId || "";
-  $("#r-notes").value = r?.notes || "";
-  $("#roster-error").textContent = "";
-  $("#roster-delete").hidden = !r;
-  $("#roster-dlg").showModal();
-  $("#r-name").focus();
-}
-
-$("#roster-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const name = $("#r-name").value.trim();
-  if (!name) return ($("#roster-error").textContent = "Enter the member's name.");
-  const entry = {
-    name: name.slice(0, 60),
-    callsign: $("#r-callsign").value.trim().slice(0, 20),
-    rank: $("#r-rank").value,
-    division: $("#r-division").value,
-    status: $("#r-status").value,
-    joined: $("#r-joined").value,
-    discordId: $("#r-discord").value.replace(/\D/g, ""),
-    notes: $("#r-notes").value.trim().slice(0, 1000),
-    updatedAt: Date.now(),
-  };
-  if (editingMember) Object.assign(editingMember, entry);
-  else state.roster.push({ id: uid(), ...entry });
-  $("#roster-dlg").close();
-  toast(editingMember ? "Member saved." : "Member added.");
-  changed();
-  renderRoster();
-});
-
-$("#roster-delete").addEventListener("click", () => {
-  if (!editingMember || !confirm(`Remove ${editingMember.name} from the roster?`)) return;
-  forget(editingMember.id);
-  state.roster = state.roster.filter((r) => r !== editingMember);
-  $("#roster-dlg").close();
-  toast("Member removed from the roster.");
-  changed();
-  renderRoster();
-});
-
-// ---------- markdown ----------
-// Everything is escaped first, so no HTML from a document can run.
-// Supports: # headings, **bold**, *italic*, `code`, [links](https://...), - lists, 1. lists, > quotes, tables, ---.
-function inline(s) {
-  return s
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-}
-function render(md) {
-  if (!md) return "";
-  const lines = esc(md).replace(/\r/g, "").split("\n");
-  const out = [];
-  let para = [];
-  const flush = () => { if (para.length) out.push(`<p>${para.map(inline).join("<br>")}</p>`); para = []; };
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    let m;
-    if (!line.trim()) { flush(); continue; }
-    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) { flush(); const n = Math.min(m[1].length + 1, 4); out.push(`<h${n}>${inline(m[2])}</h${n}>`); continue; }
-    if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); out.push("<hr>"); continue; }
-    if (/^\s*&gt;\s?/.test(line)) {
-      flush(); const q = [];
-      while (i < lines.length && /^\s*&gt;\s?/.test(lines[i])) q.push(inline(lines[i++].replace(/^\s*&gt;\s?/, "")));
-      i--; out.push(`<blockquote>${q.join("<br>")}</blockquote>`); continue;
-    }
-    if (/^\s*([-*+]|\d+\.)\s+/.test(line)) {
-      flush(); const ordered = /^\s*\d+\./.test(line); const items = [];
-      while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i])) items.push(`<li>${inline(lines[i++].replace(/^\s*([-*+]|\d+\.)\s+/, ""))}</li>`);
-      i--; out.push(`<${ordered ? "ol" : "ul"}>${items.join("")}</${ordered ? "ol" : "ul"}>`); continue;
-    }
-    if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1] || "")) {
-      flush(); const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
-      const head = cells(line); i += 2; const rows = [];
-      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(cells(lines[i++]));
-      i--; out.push(`<table><thead><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`); continue;
-    }
-    para.push(line);
-  }
-  flush();
-  return out.join("\n");
-}
-
-// ---------- documents ----------
-const groupKey = (d) => (d.category === "Division" ? `Division: ${d.division || "Unassigned"}` : d.category);
-
-function showDocs(id) {
-  renderDocList(id);
-  if (id) openDoc(id);
-  else showReaderEmpty();
-}
-
-function showReaderEmpty() {
-  currentDoc = null;
-  const any = state.docs.length || (!isAdmin() && lockedGroups().length);
-  $("#reader").innerHTML = `<div class="empty">${any ? "Pick a document from the list to read it." : isAdmin() ? "There are no documents yet. Create the first one with New document." : "No documents have been published yet."}</div>`;
-}
-
-function renderDocList(activeId) {
-  const q = $("#doc-search").value.trim().toLowerCase();
-  const list = [...state.docs].filter((d) => !q || d.title.toLowerCase().includes(q)).sort((a, b) => a.title.localeCompare(b.title));
-  const groups = {};
-  for (const d of list) (groups[groupKey(d)] ||= []).push(d);
-  // Locked documents (not command): shown under their category, opened with a password. Titles stay hidden.
-  if (!isAdmin() && !q) {
-    for (const g of lockedGroups()) {
-      const key = g.labels.length === 1 ? g.labels[0] : "Locked documents";
-      (groups[key] ||= []).push({ locked: true, id: `locked-${g.index}`, title: `${g.count} locked document${g.count === 1 ? "" : "s"}` });
-    }
-  }
-  const order = (k) => { const i = CATEGORIES.indexOf(k.startsWith("Division") ? "Division" : k); return i === -1 ? 99 : i; };
-  const keys = Object.keys(groups).sort((a, b) => order(a) - order(b) || a.localeCompare(b));
-  const link = (d) =>
-    d.locked
-      ? `<a class="locked" href="#docs/${d.id}" ${d.id === activeId ? 'aria-current="true"' : ""}><span>${esc(d.title)}</span><span class="lock-tag">Password</span></a>`
-      : `<a href="#docs/${esc(d.id)}" ${d.id === activeId ? 'aria-current="true"' : ""}>${esc(d.title)}${isAdmin() && d.code ? ' <span class="lock-tag">Password</span>' : ""}</a>`;
-  $("#doc-groups").innerHTML = keys.length
-    ? keys.map((k) => `<div class="doc-group"><h3>${esc(k)}</h3>${groups[k].map(link).join("")}</div>`).join("")
-    : `<p class="empty">${q ? "No documents match that search." : "No documents yet."}</p>`;
-}
-$("#doc-search").addEventListener("input", () => renderDocList(currentDoc?.id));
-
-function showUnlock() {
-  currentDoc = null;
-  $("#reader").innerHTML = `
-    <form class="unlock" id="unlock-form" novalidate>
-      <h2>Locked document</h2>
-      <p>This document has a password. Enter the password you were given by command or your division.</p>
-      <div class="field"><label for="unlock-code">Document password</label><input id="unlock-code" type="password" autocomplete="off" required></div>
-      <p class="form-error" id="unlock-error" role="alert"></p>
-      <button class="btn btn-primary" type="submit" id="unlock-btn">Unlock</button>
-    </form>`;
-  $("#unlock-code").focus();
-  $("#unlock-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const code = $("#unlock-code").value.trim();
-    if (!code) return ($("#unlock-error").textContent = "Enter the document password.");
-    const btn = $("#unlock-btn");
-    btn.disabled = true;
-    btn.textContent = "Unlocking...";
-    const opened = (await unlockGroups(code)).filter((g) => !session.unlocked.has(g.index));
-    btn.disabled = false;
-    btn.textContent = "Unlock";
-    if (!opened.length) return ($("#unlock-error").textContent = "That password doesn't unlock any locked documents.");
-    addUnlocked(opened);
-    session.docCodes.push(code);
-    rememberSession();
-    const docs = opened.flatMap((g) => g.docs);
-    toast(`Unlocked ${docs.length} document${docs.length === 1 ? "" : "s"}.`);
-    location.hash = `docs/${docs[0].id}`;
-  });
-}
-
-function watermark() {
-  const text = `${session.name}  ${new Date().toLocaleDateString()}  FCSO`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><text x="10" y="110" transform="rotate(-24 160 90)" font-family="Arial" font-size="15" font-weight="700" fill="#141b3d">${esc(text)}</text></svg>`;
-  return `<div class="watermark" style="background-image:url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}')"></div>`;
-}
-
-function accessNote(d) {
-  if (d.code) return ` Password: <span class="doc-code">${esc(d.code)}</span>`;
-  if (d.category === "Division") return " Command only.";
-  return " Open to all deputies.";
-}
-
-function openDoc(id) {
-  if (!isAdmin() && id.startsWith("locked-")) return showUnlock();
-  const d = state.docs.find((x) => x.id === id);
-  if (!d) {
-    currentDoc = null;
-    $("#reader").innerHTML = `<div class="empty">That document doesn't exist or you can't view it.</div>`;
-    return;
-  }
-  currentDoc = d;
-  $("#reader").innerHTML = `
-    ${isAdmin() ? "" : watermark()}
-    <div class="reader-meta">
-      <span>${esc(d.category)}${d.division ? `: ${esc(d.division)}` : ""}. Updated ${esc(fmtDate(d.updatedAt))}${d.updatedBy ? ` by ${esc(d.updatedBy)}` : ""}.${isAdmin() ? accessNote(d) : ""}</span>
-      ${isAdmin() ? `<button class="btn btn-outline btn-sm" id="doc-edit">Edit document</button>` : ""}
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px); background: var(--ink); color: var(--white); padding: 12px 20px; border-radius: var(--radius); font-weight: 600; opacity: 0; transition: opacity 0.2s, transform 0.2s; z-index: 50; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%); }
+    .toast.error { background: var(--danger); }
+    .publish-steps { padding-left: 22px; margin: 16px 0 22px; }
+    .publish-steps li { margin-bottom: 8px; }
+    .save-status { font-size: 0.82rem; font-weight: 600; color: rgba(255, 255, 255, 0.75); text-decoration: none; padding: 3px 10px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.25); white-space: nowrap; }
+    .save-status:hover { color: var(--white); }
+    .save-status.saving { border-color: var(--khaki); color: var(--khaki); }
+    .save-status.error { background: var(--danger); border-color: var(--danger); color: var(--white); }
+    @media (max-width: 700px) { .session > span:first-child { display: none; } }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="./">
+        <img src="logo.png" alt="">
+        <span>Fayette County Sheriff's Office<small>Deputy portal</small></span>
+      </a>
+      <div class="session" id="session" hidden>
+        <span>Signed in as <b id="who"></b></span>
+        <span class="access-tag" id="access"></span>
+        <a class="save-status" id="save-status" href="#saving" hidden></a>
+        <button class="btn btn-quiet btn-sm" id="signout">Sign out</button>
+      </div>
     </div>
-    <h1 class="doc-title">${esc(d.title)}</h1>
-    <div class="prose">${render(d.body) || "<p><em>This document is empty.</em></p>"}</div>`;
-  $("#doc-edit")?.addEventListener("click", () => openDocEditor(d));
-}
+  </header>
 
-let editingDoc = null;
-function openDocEditor(d) {
-  editingDoc = d;
-  $("#doc-dlg-title").textContent = d ? "Edit document" : "New document";
-  $("#d-title").value = d?.title || "";
-  $("#d-category").value = d?.category || CATEGORIES[0];
-  $("#d-division").value = d?.division || DIVISIONS[0];
-  $("#d-body").value = d?.body || "";
-  $("#d-code").value = d?.code || "";
-  $("#doc-error").textContent = "";
-  $("#doc-delete").hidden = !d;
-  syncDivisionField();
-  updatePreview();
-  $("#doc-dlg").showModal();
-  $("#d-title").focus();
-}
-function syncDivisionField() { $("#d-division-field").hidden = $("#d-category").value !== "Division"; }
-function updatePreview() { $("#d-preview").innerHTML = render($("#d-body").value) || "<p class='hint'>The preview shows here as you type.</p>"; }
-$("#d-category").addEventListener("change", syncDivisionField);
-$("#d-body").addEventListener("input", updatePreview);
-$("#doc-new").addEventListener("click", () => openDocEditor(null));
+  <main>
+    <!-- sign in -->
+    <section class="login" id="login">
+      <div class="login-card">
+        <div class="login-head">
+          <img src="logo.png" alt="Fayette County Sheriff's Office badge">
+          <div class="login-stripe"><h1>Deputy portal</h1></div>
+        </div>
+        <form class="login-body" id="login-form" novalidate>
+          <p>Sign in with the access code you were given by command, or a document password. Your name is shown on any document you open.</p>
+          <div class="field">
+            <label for="login-name">Name or callsign</label>
+            <input id="login-name" autocomplete="nickname" required maxlength="40">
+          </div>
+          <div class="field">
+            <label for="login-code">Access code</label>
+            <input id="login-code" type="password" autocomplete="current-password" required>
+          </div>
+          <p class="form-error" id="login-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit" id="login-btn">Sign in</button>
+          <div class="login-foot"><a href="./">Back to the main site</a></div>
+        </form>
+      </div>
+    </section>
 
-// Readable random password, e.g. "sod-k7mq-p2xd" (no letters that look alike).
-$("#d-code-gen").addEventListener("click", () => {
-  const abc = "abcdefghjkmnpqrstuvwxyz23456789";
-  const part = () => [...crypto.getRandomValues(new Uint8Array(4))].map((b) => abc[b % abc.length]).join("");
-  const source = $("#d-category").value === "Division" ? $("#d-division").value : $("#d-category").value;
-  const prefix = source.split(" ").filter((w) => /^[A-Z]/.test(w) && !["Division", "Unit"].includes(w)).map((w) => w[0]).join("").toLowerCase() || "doc";
-  $("#d-code").value = `${prefix}-${part()}-${part()}`;
-});
+    <!-- app -->
+    <div id="app" hidden>
+      <nav class="tabs" aria-label="Portal">
+        <div class="wrap" id="tabs">
+          <a href="#roster" data-tab="roster">Roster</a>
+          <a href="#docs" data-tab="docs">Documents</a>
+          <a href="#announcements" data-tab="announcements" data-admin>Announcements</a>
+          <a href="#saving" data-tab="saving" data-admin>Saving</a>
+        </div>
+      </nav>
 
-$("#doc-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const title = $("#d-title").value.trim();
-  if (!title) return ($("#doc-error").textContent = "Give the document a title.");
-  const category = $("#d-category").value;
-  const code = $("#d-code").value.trim();
-  if (code && code.length < 6) return ($("#doc-error").textContent = "Document passwords must be at least 6 characters.");
-  if (code && (code === state.codes.admin || code === state.codes.deputy)) return ($("#doc-error").textContent = "Use a different password from the deputy and command codes.");
-  const fields = {
-    title: title.slice(0, 150),
-    category,
-    division: category === "Division" ? $("#d-division").value : null,
-    code: code || null,
-    body: $("#d-body").value,
-    updatedAt: Date.now(),
-    updatedBy: session.name,
-  };
-  let doc = editingDoc;
-  if (doc) Object.assign(doc, fields);
-  else state.docs.push((doc = { id: uid(), ...fields }));
-  $("#doc-dlg").close();
-  toast(editingDoc ? "Document saved." : "Document created.");
-  changed();
-  if (location.hash === `#docs/${doc.id}`) showDocs(doc.id);
-  else location.hash = `docs/${doc.id}`;
-});
+      <!-- roster -->
+      <section class="view wrap" id="view-roster" hidden>
+        <div class="view-head">
+          <div><h2>Department roster</h2><p id="roster-sub">Everyone currently on the department.</p></div>
+          <div class="actions" data-admin>
+            <button class="btn btn-primary btn-sm" id="roster-add">Add member</button>
+          </div>
+        </div>
+        <div class="filters">
+          <label class="sr-only" for="roster-search">Search the roster</label>
+          <input id="roster-search" type="search" placeholder="Search by name or callsign">
+          <label class="sr-only" for="roster-rank">Filter by rank</label>
+          <select id="roster-rank"><option value="">All ranks</option></select>
+          <label class="sr-only" for="roster-division">Filter by division</label>
+          <select id="roster-division"><option value="">All divisions</option></select>
+          <label class="sr-only" for="roster-status">Filter by status</label>
+          <select id="roster-status"><option value="">All statuses</option></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Callsign</th><th>Name</th><th>Rank</th><th>Division</th><th>Status</th><th>Joined</th><th data-admin><span class="sr-only">Edit</span></th></tr></thead>
+            <tbody id="roster-body"></tbody>
+          </table>
+        </div>
+        <p class="count" id="roster-count"></p>
+      </section>
 
-$("#doc-delete").addEventListener("click", () => {
-  if (!editingDoc || !confirm(`Delete "${editingDoc.title}"? This can't be undone.`)) return;
-  forget(editingDoc.id);
-  state.docs = state.docs.filter((d) => d !== editingDoc);
-  $("#doc-dlg").close();
-  toast("Document deleted.");
-  changed();
-  location.hash = "docs";
-  showDocs();
-});
+      <!-- documents -->
+      <section class="view wrap" id="view-docs" hidden>
+        <div class="view-head">
+          <div><h2>Documents</h2><p id="docs-sub">Department procedures, training material, and references.</p></div>
+          <div class="actions" data-admin><button class="btn btn-primary btn-sm" id="doc-new">New document</button></div>
+        </div>
+        <div class="docs">
+          <aside class="doc-list">
+            <label class="sr-only" for="doc-search">Search documents</label>
+            <input id="doc-search" type="search" placeholder="Search documents">
+            <div id="doc-groups"></div>
+          </aside>
+          <article class="reader" id="reader">
+            <div class="empty" id="reader-empty">Pick a document from the list to read it.</div>
+          </article>
+        </div>
+      </section>
 
-// ---------- announcements ----------
-function renderAnnouncements() {
-  const list = [...state.announcements].reverse();
-  $("#ann-list").innerHTML = list.length
-    ? list.map((a) => `<div class="ann-item"><div><b>${esc(a.title)}</b><p>${esc(a.body)}</p><span class="hint">Posted ${esc(fmtDateTime(a.at))}${a.by ? ` by ${esc(a.by)}` : ""}</span></div><button class="btn btn-danger btn-sm" data-remove="${esc(a.id)}">Remove</button></div>`).join("")
-    : `<p class="empty">No announcements yet. Anything you post shows on the home page.</p>`;
-}
+      <!-- announcements (command) -->
+      <section class="view wrap" id="view-announcements" hidden>
+        <div class="view-head"><div><h2>Announcements</h2><p>Announcements appear at the top of the public home page. The newest five are shown.</p></div></div>
+        <form class="panel" id="ann-form">
+          <h3>Post an announcement</h3>
+          <div class="field"><label for="ann-title">Title</label><input id="ann-title" maxlength="120" required></div>
+          <div class="field"><label for="ann-body">Message</label><textarea id="ann-body" maxlength="2000" required></textarea></div>
+          <p class="form-error" id="ann-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit">Post announcement</button>
+        </form>
+        <div class="panel"><h3>Posted</h3><div id="ann-list"></div></div>
+      </section>
 
-$("#ann-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const title = $("#ann-title").value.trim();
-  const body = $("#ann-body").value.trim();
-  if (!title || !body) return ($("#ann-error").textContent = "Add a title and a message.");
-  state.announcements.push({ id: uid(), title: title.slice(0, 120), body: body.slice(0, 2000), at: Date.now(), by: session.name });
-  $("#ann-title").value = "";
-  $("#ann-body").value = "";
-  $("#ann-error").textContent = "";
-  toast("Announcement posted.");
-  changed();
-  renderAnnouncements();
-});
+      <!-- saving (command) -->
+      <section class="view wrap" id="view-saving" hidden>
+        <div class="view-head"><div><h2>Saving</h2><p>Changes save to the website automatically a few seconds after you make them. Deputies see them about a minute later, once GitHub updates the site.</p></div></div>
+        <div class="panel">
+          <h3 id="saving-state">Checking...</h3>
+          <p id="saving-detail"></p>
+          <div class="actions">
+            <button class="btn btn-primary" id="save-now">Save now</button>
+            <button class="btn btn-quiet" id="save-download">Download a backup copy</button>
+          </div>
+        </div>
+        <form class="panel" id="gh-form" autocomplete="off">
+          <h3>GitHub connection</h3>
+          <p>The portal saves by updating <b>content.json</b> in the website's GitHub repository. This needs a GitHub access token that can only edit that one repository. The token is stored locked inside the command copy of the site, so only command can use it.</p>
+          <div class="two">
+            <div class="field"><label for="gh-owner">GitHub username or organization</label><input id="gh-owner" maxlength="100" placeholder="your-github-name" spellcheck="false"></div>
+            <div class="field"><label for="gh-repo">Repository name</label><input id="gh-repo" maxlength="100" placeholder="fcso-website" spellcheck="false"></div>
+          </div>
+          <div class="two">
+            <div class="field"><label for="gh-branch">Branch</label><input id="gh-branch" maxlength="100" value="main" spellcheck="false"></div>
+            <div class="field"><label for="gh-token">Access token</label><input id="gh-token" type="password" maxlength="300" spellcheck="false" placeholder="github_pat_..."><p class="hint" id="gh-token-hint">Leave empty to keep the saved token.</p></div>
+          </div>
+          <p class="form-error" id="gh-error" role="alert"></p>
+          <button class="btn btn-primary" type="submit" id="gh-save">Connect and save</button>
+        </form>
+      </section>
+    </div>
+  </main>
 
-$("#ann-list").addEventListener("click", (e) => {
-  const id = e.target.closest("[data-remove]")?.dataset.remove;
-  if (!id || !confirm("Remove this announcement from the home page?")) return;
-  forget(id);
-  state.announcements = state.announcements.filter((a) => a.id !== id);
-  toast("Announcement removed.");
-  changed();
-  renderAnnouncements();
-});
+  <!-- roster editor -->
+  <dialog id="roster-dlg" aria-labelledby="roster-dlg-title">
+    <form method="dialog" id="roster-form">
+      <div class="dlg-head"><h2 id="roster-dlg-title">Add member</h2></div>
+      <div class="dlg-body">
+        <div class="two">
+          <div class="field"><label for="r-name">Name</label><input id="r-name" maxlength="60" required></div>
+          <div class="field"><label for="r-callsign">Callsign</label><input id="r-callsign" maxlength="20" placeholder="1101"></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="r-rank">Rank</label><select id="r-rank"><option value="">No rank</option></select></div>
+          <div class="field"><label for="r-division">Division</label><select id="r-division"><option value="">None</option></select></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="r-status">Status</label><select id="r-status"></select></div>
+          <div class="field"><label for="r-joined">Joined</label><input id="r-joined" type="date"></div>
+        </div>
+        <div class="field"><label for="r-discord">Discord user ID</label><input id="r-discord" maxlength="25" inputmode="numeric"><p class="hint">Optional. Lets the bot match this member later.</p></div>
+        <div class="field"><label for="r-notes">Command notes</label><textarea id="r-notes" maxlength="1000" style="min-height:80px"></textarea><p class="hint">Only command can see these.</p></div>
+        <p class="form-error" id="roster-error" role="alert"></p>
+      </div>
+      <div class="dlg-foot">
+        <button type="button" class="btn btn-danger btn-sm" id="roster-delete">Remove from roster</button>
+        <div class="right">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="roster-save">Save member</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
-// ---------- dialogs ----------
-$$("dialog [data-close]").forEach((b) => b.addEventListener("click", () => b.closest("dialog").close()));
+  <!-- document editor -->
+  <dialog id="doc-dlg" class="wide" aria-labelledby="doc-dlg-title">
+    <form method="dialog" id="doc-form">
+      <div class="dlg-head"><h2 id="doc-dlg-title">New document</h2></div>
+      <div class="dlg-body">
+        <div class="field"><label for="d-title">Title</label><input id="d-title" maxlength="150" required></div>
+        <div class="two">
+          <div class="field"><label for="d-category">Category</label><select id="d-category"></select><p class="hint">Without a password, division documents are command-only and every other document is open to deputies.</p></div>
+          <div class="field" id="d-division-field"><label for="d-division">Division</label><select id="d-division"></select></div>
+        </div>
+        <div class="field" id="d-code-field">
+          <label for="d-code">Document password</label>
+          <div class="code-row"><input id="d-code" maxlength="64" autocomplete="off" spellcheck="false"><button type="button" class="btn btn-outline btn-sm" id="d-code-gen">Generate</button></div>
+          <p class="hint">Optional. With a password, deputies must enter it to open this document, and anyone with the password can read it. Give several documents the same password to unlock them together. Command can always open every document.</p>
+        </div>
+        <div class="editor">
+          <div class="field"><label for="d-body">Content</label><textarea id="d-body" spellcheck="true"></textarea><p class="hint">Formatting: # Heading, **bold**, *italic*, - list item, 1. numbered item, [link](https://...)</p></div>
+          <div class="field"><label>Preview</label><div class="preview prose" id="d-preview"></div></div>
+        </div>
+        <p class="form-error" id="doc-error" role="alert"></p>
+      </div>
+      <div class="dlg-foot">
+        <button type="button" class="btn btn-danger btn-sm" id="doc-delete">Delete document</button>
+        <div class="right">
+          <button type="button" class="btn btn-quiet" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary" id="doc-save">Save document</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
-// ---------- deputy copy deterrents (documents and roster are view-only) ----------
-const protectedArea = (t) => document.body.classList.contains("locked") && t.closest?.(".reader, .table-wrap");
-["copy", "cut", "contextmenu", "dragstart", "selectstart"].forEach((type) =>
-  document.addEventListener(type, (e) => {
-    if (protectedArea(e.target)) e.preventDefault();
-  })
-);
-document.addEventListener("keydown", (e) => {
-  if (!document.body.classList.contains("locked")) return;
-  const k = e.key.toLowerCase();
-  if ((e.ctrlKey || e.metaKey) && ["c", "x", "a", "p", "s"].includes(k) && !e.target.matches("input, textarea")) {
-    e.preventDefault();
-    if (k === "p" || k === "s") toast("Saving and printing documents is turned off.", true);
-  }
-});
+  <div class="toast" id="toast" role="status"></div>
 
-// ---------- start ----------
-(async () => {
-  let saved;
-  try { saved = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch {}
-  if (saved?.code) {
-    $("#login-btn").disabled = true;
-    $("#login-btn").textContent = "Unlocking...";
-    try {
-      await loadFile();
-      await signIn(saved.name, saved.code, saved.docCodes || []);
-      return;
-    } catch {
-      try { sessionStorage.removeItem(SESSION_KEY); } catch {}
-    } finally {
-      $("#login-btn").disabled = false;
-      $("#login-btn").textContent = "Sign in";
-    }
-  }
-  $("#login").hidden = false;
-})();
+  <script src="portal.js?v=4"></script>
+</body>
+</html>
