@@ -7,6 +7,11 @@
 // Command's edits save automatically by updating content.json in the GitHub repo through the GitHub API.
 // The GitHub token lives inside the command copy, so only someone with the command code can save.
 
+// The encryption only works over HTTPS, so always switch to the secure address.
+if (location.protocol === "http:" && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+  location.replace("https://" + location.host + location.pathname + location.search + location.hash);
+}
+
 // If anything fails while loading, say so on the sign-in box instead of leaving a blank page.
 window.addEventListener("error", () => {
   const box = document.getElementById("login");
