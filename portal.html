@@ -163,7 +163,7 @@
           <img src="logo.png" alt="Fayette County Sheriff's Office badge">
           <div class="login-stripe"><h1>Deputy portal</h1></div>
         </div>
-        <form class="login-body" id="login-form" novalidate>
+        <form class="login-body" id="login-form" novalidate onsubmit="return false">
           <p>Sign in with the access code you were given by command, or a document password. Your name is shown on any document you open.</p>
           <div class="field">
             <label for="login-name">Name or callsign</label>
@@ -342,6 +342,19 @@
 
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="portal.js?v=4"></script>
+  <script src="portal.js?v=5"></script>
+  <script>
+    // If portal.js didn't load or run, say so instead of letting Sign in do nothing.
+    setTimeout(function () {
+      if (window.FCSO_PORTAL_READY) return;
+      var err = document.getElementById("login-error");
+      var why = location.protocol === "http:"
+        ? "This page was opened over http://. Open https://fayettecountysheriffs.xyz/portal.html instead."
+        : "The portal script (portal.js) didn't load. Make sure portal.js is uploaded to the site as its own file and starts with \"// Deputy portal\". Then press Ctrl + F5.";
+      if (err) err.textContent = why;
+      var btn = document.getElementById("login-btn");
+      if (btn) btn.disabled = true;
+    }, 2500);
+  </script>
 </body>
 </html>
