@@ -7,7 +7,7 @@
   <meta name="description" content="The Fayette County Sheriff's Office in Kentucky State Roleplay. Committed to Service.">
   <meta property="og:title" content="Fayette County Sheriff's Office">
   <meta property="og:description" content="Kentucky's most professional, generous, and realistic department. Committed to Service.">
-  <meta property="og:image" content="https://fayettecountysheriffs.xyz/photo-tahoe.jpg">
+  <meta property="og:image" content="https://fayettecountysheriffs.xyz/photo-banner.jpg">
   <meta name="theme-color" content="#141b3d">
   <link rel="icon" href="logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,17 +20,16 @@
       --gutter: max(16px, calc((100vw - var(--wrap)) / 2));
       position: relative; overflow: hidden;
       background: var(--khaki);
-      padding: 64px 0 72px;
-      min-height: 560px;
+      padding: 0 0 64px;
     }
+    /* full-width banner photo; the livery stripe overlaps its bottom edge */
     .hero-photo {
-      position: absolute; top: 0; right: 0; bottom: 0; width: 64%; height: 100%;
-      object-fit: cover; object-position: 60% 50%;
-      -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 34%);
-      mask-image: linear-gradient(to right, transparent 0%, #000 34%);
+      display: block; width: 100%; height: clamp(220px, 36.5vw, 500px);
+      object-fit: cover; object-position: 70% 55%;
+      background: var(--ink);
     }
     .hero-inner { position: relative; }
-    .hero-badge { width: 84px; height: 84px; margin-bottom: 20px; filter: drop-shadow(0 2px 6px rgba(20, 27, 61, 0.25)); }
+    .hero-inner .stripe { margin-top: clamp(-118px, -7.5vw, -44px); }
 
     .stripe {
       position: relative;
@@ -61,10 +60,8 @@
     .hero-live b { color: var(--ink); }
 
     @media (max-width: 860px) {
-      .hero { padding: 0 0 48px; min-height: 0; }
-      .hero-photo { position: static; width: 100%; height: 240px; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
-      .hero-badge { display: none; }
-      .stripe { margin-top: -28px; padding-right: 40px; }
+      .hero { padding: 0 0 48px; }
+      .hero-inner .stripe { margin-top: -30px; padding-right: 40px; }
     }
 
     /* ---------- sections ---------- */
@@ -105,10 +102,10 @@
     @media (max-width: 640px) { .tier { grid-template-columns: 1fr; gap: 8px; } }
 
     /* gallery */
-    .gallery { display: grid; grid-template-columns: 1.3fr 1fr; grid-template-rows: auto auto; gap: 12px; margin-top: 36px; }
+    .gallery { display: grid; grid-template-columns: 1.3fr 1fr; grid-template-rows: auto auto auto; gap: 12px; margin-top: 36px; }
     .gallery figure { margin: 0; position: relative; overflow: hidden; border-radius: var(--radius); background: var(--ink); }
     .gallery img { width: 100%; height: 100%; object-fit: cover; }
-    .gallery .tall { grid-row: span 2; }
+    .gallery .tall { grid-row: span 3; }
     .gallery figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 24px 14px 10px; color: var(--white); font-size: 0.88rem; background: linear-gradient(transparent, rgba(10, 14, 35, 0.8)); }
     @media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } .gallery .tall { grid-row: auto; } }
 
@@ -147,9 +144,8 @@
 
   <main>
     <section class="hero">
-      <img class="hero-photo" src="photo-tahoe.jpg" alt="A tan and blue Fayette Sheriff Tahoe parked at a gas station">
+      <img class="hero-photo" src="photo-banner.jpg" alt="A Fayette Sheriff Charger, unit 2134, behind a stopped car at night">
       <div class="wrap hero-inner">
-        <img class="hero-badge" src="logo.png" alt="Fayette County Sheriff's Office badge">
         <div class="stripe"><h1>Fayette County<br>Sheriff's Office</h1></div>
         <p class="motto">Committed to Service</p>
         <p class="hero-lede">Kentucky's most professional, generous, and realistic department, protecting the citizens of Fayette County in Kentucky State Roleplay.</p>
@@ -218,6 +214,7 @@
           <figure class="tall"><img src="photo-charger.jpg" alt="A Fayette Sheriff Charger, unit 6214, with its blue lights on at night" loading="lazy"><figcaption>Unit 6214 on a night call.</figcaption></figure>
           <figure><img src="photo-marine.jpg" alt="Two deputies in a sheriff's boat on the river at night" loading="lazy"><figcaption>Marine patrol on the river.</figcaption></figure>
           <figure><img src="photo-crownvic.jpg" alt="Two unmarked Criminal Investigations Unit cars parked side by side, with a deputy standing between them" loading="lazy"><figcaption>Criminal Investigations Unit vehicles.</figcaption></figure>
+          <figure><img src="photo-tahoe.jpg" alt="A tan and blue Fayette Sheriff Tahoe parked at a gas station" loading="lazy"><figcaption>Patrol Tahoe at the gas station.</figcaption></figure>
         </div>
       </div>
     </section>
