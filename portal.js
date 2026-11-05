@@ -177,9 +177,11 @@ async function signIn(name, code, docCodes = []) {
     state.codes ||= { admin: code, deputy: null };
     state.github ||= null;
     await restoreDraft();
+    seedFormats();
   } else {
     state.roster ||= [];
     state.docs ||= [];
+    state.formats ||= [];
     if (result.groups) addUnlocked(result.groups);
     for (const c of docCodes) {
       const g = await unlockGroups(c);
@@ -236,6 +238,10 @@ function startApp() {
       : "Department procedures, training material, and references. Locked documents open with their own password. Documents are read-only.";
   fillSelects();
   if (isAdmin()) {
+    if (seededFormats) {
+      seededFormats = false;
+      setTimeout(changed, 0);
+    }
     fillGithubForm();
     if (!saveState.pending && !saveState.error) setSaveStatus(state.github?.token ? "saved" : "offline");
   }
@@ -246,11 +252,11 @@ window.addEventListener("hashchange", route);
 function route() {
   if (!session) return;
   let [tab, arg] = location.hash.replace("#", "").split("/");
-  const tabs = isAdmin() ? ["roster", "docs", "announcements", "saving"] : session.role === "division" ? ["docs"] : ["roster", "docs"];
+  const tabs = isAdmin() ? ["roster", "docs", "formats", "announcements", "saving"] : session.role === "division" ? ["docs"] : ["roster", "docs", "formats"];
   if (!tabs.includes(tab)) tab = tabs[0];
   $$(".view").forEach((v) => (v.hidden = v.id !== `view-${tab}`));
   $$("#tabs a").forEach((a) => (a.dataset.tab === tab ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current")));
-  ({ roster: renderRoster, docs: () => showDocs(arg), announcements: renderAnnouncements, saving: renderSaving })[tab]();
+  ({ roster: renderRoster, docs: () => showDocs(arg), formats: renderFormats, announcements: renderAnnouncements, saving: renderSaving })[tab]();
 }
 
 // ---------- GitHub storage ----------
@@ -311,10 +317,11 @@ function directoryFromRoster() {
 async function buildContent() {
   const codes = state.codes;
   if (!codes.deputy || !codes.admin) throw new Error("The access codes are missing from the content file. Contact the site developer.");
-  const full = { roster: state.roster, docs: state.docs, announcements: state.announcements, codes, github: state.github };
+  const full = { roster: state.roster, docs: state.docs, formats: state.formats || [], announcements: state.announcements, codes, github: state.github };
   const deputyView = {
     roster: state.roster.map(({ notes, photo, email, inDirectory, ...r }) => r), // command notes stay command-only
     docs: state.docs.filter((d) => !d.code && d.category !== "Division").map(({ code, ...d }) => d),
+    formats: (state.formats || []).filter((f) => f.audience !== "admin"), // command-only formats stay command-only
   };
   // Password-protected documents: one encrypted group per password. The password itself is never written out.
   const byCode = new Map();
@@ -426,6 +433,7 @@ async function resolveConflict() {
   };
   state.roster = mergeList(state.roster, theirs.roster || []);
   state.docs = mergeList(state.docs, theirs.docs || []);
+  if (Array.isArray(theirs.formats)) state.formats = mergeList(state.formats || [], theirs.formats);
   state.announcements = mergeList(state.announcements, theirs.announcements || []).sort((a, b) => a.at - b.at);
   state.github = state.github || theirs.github;
   fileSha = latest.sha;
@@ -985,6 +993,224 @@ $("#doc-delete").addEventListener("click", () => {
   showDocs();
 });
 
+// ---------- formats: copy-ready templates (starter set, added the first time command signs in) ----------
+const FORMAT_AUDIENCES = { deputy: "All deputies", admin: "Command only" };
+const DEFAULT_FORMATS = [
+  { audience: "deputy", title: "Traffic Stop Introduction", body: `"Good [time of day], sir/ma'am. I am [Rank] [Deputy's Name] with the Fayette County Sheriff's Office. I have stopped you today for [reason]. May I see your license, registration, and proof of insurance?"
+
+Do not ask, "Do you know why I stopped you?"` },
+  { audience: "deputy", title: "Traffic Stop Radio Call", body: `[Unit Number], traffic.
+[Street name], near [cross-street / mile marker].
+[Color] [Make] [Model].
+[State] plate [Plate Number].
+
+Wait for Dispatch to "go ahead" before giving the plate. If a priority is active, self-dispatch.` },
+  { audience: "deputy", title: "Miranda Rights", body: `You have the right to remain silent. Anything you say can and will be used against you in a court of law. You have the right to an attorney. If you cannot afford an attorney, one will be appointed for you.
+
+Do you understand the rights I have just read to you? With these rights in mind, do you wish to speak to me?` },
+  { audience: "deputy", title: "Arrest Report (log in Melonly)", body: `All arrests are logged in Melonly. Use this to gather the details before logging it.
+
+Suspect Name / Username:
+Charges:
+Location of Arrest:
+Date and Time:
+Arresting Deputy (Name and Callsign):
+Assisting Units:
+Miranda Rights Read: Yes / No
+Evidence Collected:
+Narrative:` },
+  { audience: "deputy", title: "Citation", body: `Violator Name / Username:
+Vehicle (Color, Make, Model):
+Plate:
+Violation(s):
+Location:
+Date and Time:
+Fine Amount:
+Issuing Deputy (Name and Callsign):
+Notes:` },
+  { audience: "deputy", title: "Motor Vehicle Accident Report", body: `Date and Time:
+Location:
+Vehicles Involved (Color, Make, Model, Plate):
+Drivers Involved:
+Injuries: None / Minor / Serious (EMS requested: Yes / No)
+Deputy Vehicle Involved: Yes / No (if yes, supervisor notified: Yes / No)
+Cause of Collision:
+Citations Issued:
+Reporting Deputy (Name and Callsign):
+Narrative:
+
+Submit within 24 hours of the incident.` },
+  { audience: "deputy", title: "Officer-Involved Shooting Report", body: `Date and Time:
+Location:
+Involved Deputy (Name and Callsign):
+Type of Discharge: Intentional / Unintentional / Off-Duty
+Subject(s) Involved:
+Injuries: None / Minor / Serious / Fatal (EMS requested: Yes / No)
+Supervisor on Scene:
+Witnesses:
+Bodycam / Dashcam Footage Link:
+Narrative:` },
+  { audience: "deputy", title: "Use of Force Report", body: `Date and Time:
+Location:
+Deputy (Name and Callsign):
+Subject Name / Username:
+Level of Force Used:
+Reason Force Was Necessary:
+Injuries (Subject / Deputy):
+Witnesses:
+Bodycam Footage Link:
+Narrative:
+
+All uses of force must be documented and reviewed within 24 hours.` },
+  { audience: "deputy", title: "Incident Report", body: `Incident Type:
+Date and Time:
+Location:
+Reporting Deputy (Name and Callsign):
+Units Involved:
+Persons Involved:
+Evidence Collected:
+Narrative:
+
+Submit within 24 hours of the incident. Reports must be objective and fact-based.` },
+  { audience: "admin", title: "Promotion Notice", body: `Promotion
+
+Member: [Name] ([Callsign])
+Previous Rank: [Rank]
+New Rank: [Rank]
+Reason: [Reason]
+Approved By: [Name, Rank]` },
+  { audience: "admin", title: "Infraction Notice", body: `Infraction
+
+Member: [Name] ([Callsign])
+Infraction: [Verbal Warning / Written Warning / Strike / Suspension / Demotion / Termination]
+Reason: [Reason]
+Issued By: [Name, Rank]
+
+If you believe this was issued in error, you may appeal through a ticket.` },
+  { audience: "admin", title: "Activity Quota Notice", body: `Activity Notice
+
+Member: [Name] ([Callsign])
+Week: [Start Date] to [End Date]
+Time Logged: [Time] of 1 hour 30 minutes
+Action: [Warning / Strike]
+
+Please make sure you meet the weekly activity quota or request a Leave of Absence or Reduced Activity if needed.` },
+  { audience: "admin", title: "Training Result", body: `Training Result
+
+Trainee: [Name]
+Training: [Entrance Exam / Academy (FTD) / Ride-Along (RA)]
+Result: [Passed / Failed]
+Trainer: [Name, Rank]
+Notes: [Notes]` },
+];
+
+let seededFormats = false;
+function seedFormats() {
+  if (Array.isArray(state.formats)) return;
+  // Fixed ids, so two command members signing in at once can't create duplicates.
+  state.formats = DEFAULT_FORMATS.map((f) => ({ id: "starter-" + f.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), ...f, updatedAt: 0, updatedBy: "Portal" }));
+  seededFormats = true;
+}
+
+function renderFormats() {
+  const q = $("#format-search").value.trim().toLowerCase();
+  const list = [...state.formats]
+    .filter((f) => isAdmin() || f.audience !== "admin")
+    .filter((f) => !q || f.title.toLowerCase().includes(q) || f.body.toLowerCase().includes(q))
+    .sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+  const groups = [["deputy", "For all deputies"], ["admin", "Command only"]].filter(([key]) => isAdmin() || key === "deputy");
+  const html = groups
+    .map(([key, label]) => {
+      const items = list.filter((f) => (f.audience === "admin" ? "admin" : "deputy") === key);
+      if (!items.length) return "";
+      return `<section class="format-group"><h3>${esc(label)}</h3><div class="formats">${items
+        .map(
+          (f) => `<article class="format">
+            <div class="format-head">
+              <h4>${esc(f.title)}</h4>
+              <div class="format-actions">
+                ${isAdmin() ? `<button class="btn btn-quiet btn-sm" data-format-edit="${esc(f.id)}">Edit</button>` : ""}
+                <button class="btn btn-outline btn-sm" data-format-copy="${esc(f.id)}">Copy</button>
+              </div>
+            </div>
+            <pre class="format-body">${esc(f.body)}</pre>
+          </article>`
+        )
+        .join("")}</div></section>`;
+    })
+    .join("");
+  $("#formats-list").innerHTML = html || `<p class="empty">${q ? "No formats match that search." : isAdmin() ? "There are no formats yet. Add one with New format." : "No formats have been added yet."}</p>`;
+}
+$("#format-search").addEventListener("input", renderFormats);
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = Object.assign(document.createElement("textarea"), { value: text });
+    ta.style.cssText = "position:fixed;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}
+
+$("#formats-list").addEventListener("click", async (e) => {
+  const copyId = e.target.closest("[data-format-copy]")?.dataset.formatCopy;
+  const editId = e.target.closest("[data-format-edit]")?.dataset.formatEdit;
+  if (copyId) {
+    const f = state.formats.find((x) => x.id === copyId);
+    if (f && (await copyText(f.body))) {
+      const btn = e.target.closest("button");
+      btn.textContent = "Copied";
+      setTimeout(() => (btn.textContent = "Copy"), 1600);
+    } else toast("Couldn't copy. Select the text and copy it instead.", true);
+  }
+  if (editId) openFormatEditor(state.formats.find((x) => x.id === editId));
+});
+
+let editingFormat = null;
+function openFormatEditor(f) {
+  editingFormat = f;
+  $("#format-dlg-title").textContent = f ? "Edit format" : "New format";
+  $("#f-title").value = f?.title || "";
+  $("#f-audience").value = f?.audience === "admin" ? "admin" : "deputy";
+  $("#f-body").value = f?.body || "";
+  $("#format-error").textContent = "";
+  $("#format-delete").hidden = !f;
+  $("#format-dlg").showModal();
+  $("#f-title").focus();
+}
+$("#format-new").addEventListener("click", () => openFormatEditor(null));
+
+$("#format-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const title = $("#f-title").value.trim();
+  const body = $("#f-body").value.replace(/\s+$/, "");
+  if (!title) return ($("#format-error").textContent = "Give the format a title.");
+  if (!body.trim()) return ($("#format-error").textContent = "Add the format's text.");
+  const fields = { title: title.slice(0, 120), audience: $("#f-audience").value === "admin" ? "admin" : "deputy", body: body.slice(0, 8000), updatedAt: Date.now(), updatedBy: session.name };
+  if (editingFormat) Object.assign(editingFormat, fields);
+  else state.formats.push({ id: uid(), ...fields });
+  $("#format-dlg").close();
+  toast(editingFormat ? "Format saved." : "Format added.");
+  changed();
+  renderFormats();
+});
+
+$("#format-delete").addEventListener("click", () => {
+  if (!editingFormat || !confirm(`Delete the "${editingFormat.title}" format?`)) return;
+  forget(editingFormat.id);
+  state.formats = state.formats.filter((f) => f !== editingFormat);
+  $("#format-dlg").close();
+  toast("Format deleted.");
+  changed();
+  renderFormats();
+});
+
 // ---------- announcements ----------
 function renderAnnouncements() {
   const list = [...state.announcements].reverse();
@@ -1030,6 +1256,8 @@ const protectedArea = (t) => document.body.classList.contains("locked") && t.clo
 document.addEventListener("keydown", (e) => {
   if (!document.body.classList.contains("locked")) return;
   const k = e.key.toLowerCase();
+  const inFormats = !!window.getSelection()?.anchorNode?.parentElement?.closest?.("#view-formats");
+  if (inFormats && (k === "c" || k === "a")) return;
   if ((e.ctrlKey || e.metaKey) && ["c", "x", "a", "p", "s"].includes(k) && !e.target.matches("input, textarea")) {
     e.preventDefault();
     if (k === "p" || k === "s") toast("Saving and printing documents is turned off.", true);
