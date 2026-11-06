@@ -317,7 +317,7 @@ function directoryFromRoster() {
 async function buildContent() {
   const codes = state.codes;
   if (!codes.deputy || !codes.admin) throw new Error("The access codes are missing from the content file. Contact the site developer.");
-  const full = { roster: state.roster, docs: state.docs, formats: state.formats || [], announcements: state.announcements, codes, github: state.github };
+  const full = { roster: state.roster, docs: state.docs, formats: state.formats || [], formatsVersion: state.formatsVersion || 1, announcements: state.announcements, codes, github: state.github };
   const deputyView = {
     roster: state.roster.map(({ notes, photo, email, inDirectory, ...r }) => r), // command notes stay command-only
     docs: state.docs.filter((d) => !d.code && d.category !== "Division").map(({ code, ...d }) => d),
@@ -434,6 +434,7 @@ async function resolveConflict() {
   state.roster = mergeList(state.roster, theirs.roster || []);
   state.docs = mergeList(state.docs, theirs.docs || []);
   if (Array.isArray(theirs.formats)) state.formats = mergeList(state.formats || [], theirs.formats);
+  state.formatsVersion = Math.max(state.formatsVersion || 1, theirs.formatsVersion || 1);
   state.announcements = mergeList(state.announcements, theirs.announcements || []).sort((a, b) => a.at - b.at);
   state.github = state.github || theirs.github;
   fileSha = latest.sha;
@@ -1104,12 +1105,58 @@ Trainer: [Name, Rank]
 Notes: [Notes]` },
 ];
 
+// Added later. These get added for departments that already have formats, without bringing back deleted ones.
+const FORMATS_V2 = [
+  { audience: "admin", title: "Fast-Pass Interview", body: `Fast-Pass Interview
+
+Candidate Username:
+Discord Username:
+Interviewer: [Rank] [Name]
+Date:
+
+Background
+1. What law enforcement roleplay experience do you have, and with which departments?
+2. Why do you want to join the Fayette County Sheriff's Office?
+3. Have you ever been blacklisted or terminated from a department? If so, why?
+
+Knowledge Check
+4. Walk me through how you would introduce yourself on a traffic stop.
+5. What question are you not allowed to ask on a traffic stop, and why?
+6. In what order do you give information when calling in a traffic stop?
+7. Which statuses require voice contact with Dispatch, and which are done through the MDT?
+8. When must Miranda rights be read?
+9. When is force appropriate, and when must it be reported?
+10. Who do you report to first if you have a problem on shift?
+
+Scenario
+11. [Give the candidate a scenario, e.g. a vehicle refuses to stop for your lights. How do you handle it?]
+
+Result
+Outcome: Approved / Denied
+Notes:
+Interviewer Signature: [Rank] [Name]` },
+  { audience: "admin", title: "Ticket Claim Response", body: `Hello, I am [Rank] [Name], and I will be handling your ticket. Please state how I can best assist you today.` },
+  { audience: "admin", title: "Ticket Closing Response", body: `Thank you for contacting our team. If there is nothing else you need, please let me know once you're ready for this ticket to be closed.` },
+];
+const FORMATS_VERSION = 2;
+const starterId = (f) => "starter-" + f.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
 let seededFormats = false;
 function seedFormats() {
-  if (Array.isArray(state.formats)) return;
   // Fixed ids, so two command members signing in at once can't create duplicates.
-  state.formats = DEFAULT_FORMATS.map((f) => ({ id: "starter-" + f.title.toLowerCase().replace(/[^a-z0-9]+/g, "-"), ...f, updatedAt: 0, updatedBy: "Portal" }));
-  seededFormats = true;
+  const make = (list) => list.map((f) => ({ id: starterId(f), ...f, updatedAt: 0, updatedBy: "Portal" }));
+  if (!Array.isArray(state.formats)) {
+    state.formats = make([...DEFAULT_FORMATS, ...FORMATS_V2]);
+    state.formatsVersion = FORMATS_VERSION;
+    seededFormats = true;
+    return;
+  }
+  if ((state.formatsVersion || 1) < 2) {
+    const have = new Set(state.formats.map((f) => f.id));
+    state.formats.push(...make(FORMATS_V2).filter((f) => !have.has(f.id)));
+    state.formatsVersion = 2;
+    seededFormats = true;
+  }
 }
 
 function renderFormats() {
