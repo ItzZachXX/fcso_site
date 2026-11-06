@@ -28,7 +28,9 @@ const RANKS = [
   ["Cadet", "Cadets"],
 ].map(([name, tier]) => ({ name, tier }));
 const DIVISIONS = ["Special Operations Division", "Traffic Services Division", "Criminal Investigations Unit", "Internal Affairs Division", "Field Training Division", "Public Relations Division"];
-const CATEGORIES = ["General", "Standard Operating Procedures", "Training", "Division"];
+const CATEGORIES = ["General", "Standard Operating Procedures", "Training", "Field Training", "Division"];
+// Sections whose documents always need a section code. The code is set by command the first time and is never written in this file.
+const CODED_SECTIONS = ["Field Training"];
 const STATUSES = ["Active", "Leave of Absence", "Reduced Activity", "Suspended", "Probationary"];
 
 const CONTENT_FILE = "content.json";
@@ -317,7 +319,7 @@ function directoryFromRoster() {
 async function buildContent() {
   const codes = state.codes;
   if (!codes.deputy || !codes.admin) throw new Error("The access codes are missing from the content file. Contact the site developer.");
-  const full = { roster: state.roster, docs: state.docs, formats: state.formats || [], formatsVersion: state.formatsVersion || 1, announcements: state.announcements, codes, github: state.github };
+  const full = { roster: state.roster, docs: state.docs, formats: state.formats || [], formatsVersion: state.formatsVersion || 1, announcements: state.announcements, codes, github: state.github, sectionCodes: state.sectionCodes || {} };
   const deputyView = {
     roster: state.roster.map(({ notes, photo, email, inDirectory, ...r }) => r), // command notes stay command-only
     docs: state.docs.filter((d) => !d.code && d.category !== "Division").map(({ code, ...d }) => d),
@@ -437,6 +439,7 @@ async function resolveConflict() {
   state.formatsVersion = Math.max(state.formatsVersion || 1, theirs.formatsVersion || 1);
   state.announcements = mergeList(state.announcements, theirs.announcements || []).sort((a, b) => a.at - b.at);
   state.github = state.github || theirs.github;
+  state.sectionCodes = { ...(theirs.sectionCodes || {}), ...(state.sectionCodes || {}) };
   fileSha = latest.sha;
   toast("Another command member saved at the same time. Both sets of changes were kept.");
 }
@@ -862,13 +865,15 @@ function renderDocList(activeId) {
 }
 $("#doc-search").addEventListener("input", () => renderDocList(currentDoc?.id));
 
-function showUnlock() {
+function showUnlock(id) {
   currentDoc = null;
+  const g = (file?.locked || [])[Number(String(id).replace("locked-", ""))];
+  const section = g?.labels?.length === 1 && CODED_SECTIONS.includes(g.labels[0]) ? g.labels[0] : null;
   $("#reader").innerHTML = `
     <form class="unlock" id="unlock-form" novalidate>
-      <h2>Locked document</h2>
-      <p>This document has a password. Enter the password you were given by command or your division.</p>
-      <div class="field"><label for="unlock-code">Document password</label><input id="unlock-code" type="password" autocomplete="off" required></div>
+      <h2>${section ? `${esc(section)} is locked` : "Locked document"}</h2>
+      <p>${section ? `Enter the ${esc(section)} code to open every document in this section.` : "This document has a password. Enter the password you were given by command or your division."}</p>
+      <div class="field"><label for="unlock-code">${section ? `${esc(section)} code` : "Document password"}</label><input id="unlock-code" type="password" autocomplete="off" required></div>
       <p class="form-error" id="unlock-error" role="alert"></p>
       <button class="btn btn-primary" type="submit" id="unlock-btn">Unlock</button>
     </form>`;
@@ -906,7 +911,7 @@ function accessNote(d) {
 }
 
 function openDoc(id) {
-  if (!isAdmin() && id.startsWith("locked-")) return showUnlock();
+  if (!isAdmin() && id.startsWith("locked-")) return showUnlock(id);
   const d = state.docs.find((x) => x.id === id);
   if (!d) {
     currentDoc = null;
@@ -941,7 +946,15 @@ function openDocEditor(d) {
   $("#doc-dlg").showModal();
   $("#d-title").focus();
 }
-function syncDivisionField() { $("#d-division-field").hidden = $("#d-category").value !== "Division"; }
+function syncDivisionField() {
+  const cat = $("#d-category").value;
+  $("#d-division-field").hidden = cat !== "Division";
+  const coded = CODED_SECTIONS.includes(cat);
+  $("#d-code-hint").textContent = coded
+    ? `Every ${cat} document needs the ${cat} code. Deputies enter it once to open the whole section.`
+    : "";
+  if (coded && state.sectionCodes?.[cat]) $("#d-code").value = state.sectionCodes[cat];
+}
 function updatePreview() { $("#d-preview").innerHTML = render($("#d-body").value) || "<p class='hint'>The preview shows here as you type.</p>"; }
 $("#d-category").addEventListener("change", syncDivisionField);
 $("#d-body").addEventListener("input", updatePreview);
@@ -962,6 +975,7 @@ $("#doc-form").addEventListener("submit", (e) => {
   if (!title) return ($("#doc-error").textContent = "Give the document a title.");
   const category = $("#d-category").value;
   const code = $("#d-code").value.trim();
+  if (CODED_SECTIONS.includes(category) && !code) return ($("#doc-error").textContent = `Enter the ${category} code. Every ${category} document needs it.`);
   if (code && code.length < 6) return ($("#doc-error").textContent = "Document passwords must be at least 6 characters.");
   if (code && (code === state.codes.admin || code === state.codes.deputy)) return ($("#doc-error").textContent = "Use a different password from the deputy and command codes.");
   const fields = {
@@ -973,6 +987,12 @@ $("#doc-form").addEventListener("submit", (e) => {
     updatedAt: Date.now(),
     updatedBy: session.name,
   };
+  if (CODED_SECTIONS.includes(category)) {
+    const prev = state.sectionCodes?.[category];
+    state.sectionCodes = { ...(state.sectionCodes || {}), [category]: code };
+    // Changing the section code moves every document in the section to the new code.
+    if (prev && prev !== code) for (const d of state.docs) if (d.category === category) d.code = code;
+  }
   let doc = editingDoc;
   if (doc) Object.assign(doc, fields);
   else state.docs.push((doc = { id: uid(), ...fields }));

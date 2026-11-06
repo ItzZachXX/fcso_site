@@ -406,6 +406,7 @@
           <label for="d-code">Document password</label>
           <div class="code-row"><input id="d-code" maxlength="64" autocomplete="off" spellcheck="false"><button type="button" class="btn btn-outline btn-sm" id="d-code-gen">Generate</button></div>
           <p class="hint">Optional. With a password, deputies must enter it to open this document, and anyone with the password can read it. Give several documents the same password to unlock them together. Command can always open every document.</p>
+          <p class="hint" id="d-code-hint" style="font-weight:600;color:var(--ink)"></p>
         </div>
         <div class="editor">
           <div class="field"><label for="d-body">Content</label><textarea id="d-body" spellcheck="true"></textarea><p class="hint">Formatting: # Heading, **bold**, *italic*, - list item, 1. numbered item, [link](https://...)</p></div>
@@ -425,7 +426,7 @@
 
   <div class="toast" id="toast" role="status"></div>
 
-  <script src="portal.js?v=9"></script>
+  <script src="portal.js?v=10"></script>
   <script>
     // If portal.js didn't load or run, say so instead of letting Sign in do nothing.
     setTimeout(function () {
