@@ -333,7 +333,8 @@ async function buildContent() {
     const { code, ...doc } = d;
     byCode.get(d.code).push(doc);
   }
-  const locked = [];
+  // Groups published straight to the site (not yet added by command) are kept until command adds them.
+  const locked = (file?.locked || []).filter((g) => g.pending);
   for (const [code, docs] of byCode) {
     const labels = [...new Set(docs.map((d) => (d.category === "Division" ? `Division: ${d.division || "Unassigned"}` : d.category)))];
     locked.push({ labels, count: docs.length, box: await seal({ docs }, code) });
@@ -441,6 +442,7 @@ async function resolveConflict() {
   state.github = state.github || theirs.github;
   state.sectionCodes = { ...(theirs.sectionCodes || {}), ...(state.sectionCodes || {}) };
   fileSha = latest.sha;
+  if (file) file.locked = latest.json.locked || [];
   toast("Another command member saved at the same time. Both sets of changes were kept.");
 }
 
@@ -853,6 +855,14 @@ function renderDocList(activeId) {
       (groups[key] ||= []).push({ locked: true, id: `locked-${g.index}`, title: `${g.count} locked document${g.count === 1 ? "" : "s"}` });
     }
   }
+  // Command: documents published to the site that still need adding to the portal.
+  if (isAdmin() && !q) {
+    for (const [index, g] of (file?.locked || []).entries()) {
+      if (!g.pending) continue;
+      const key = g.labels.length === 1 ? g.labels[0] : "Locked documents";
+      (groups[key] ||= []).push({ locked: true, id: `import-${index}`, title: `${g.count} document${g.count === 1 ? "" : "s"} to add` });
+    }
+  }
   const order = (k) => { const i = CATEGORIES.indexOf(k.startsWith("Division") ? "Division" : k); return i === -1 ? 99 : i; };
   const keys = Object.keys(groups).sort((a, b) => order(a) - order(b) || a.localeCompare(b));
   const link = (d) =>
@@ -898,6 +908,43 @@ function showUnlock(id) {
   });
 }
 
+// Command adds a published group to the portal once, with its code. After that it saves like any other document.
+function showImport(id) {
+  currentDoc = null;
+  const g = (file?.locked || [])[Number(id.replace("import-", ""))];
+  if (!g?.pending) return showReaderEmpty();
+  const label = g.labels.length === 1 ? g.labels[0] : "these documents";
+  $("#reader").innerHTML = `
+    <form class="unlock" id="import-form" novalidate>
+      <h2>Add ${g.count} ${esc(label)} document${g.count === 1 ? "" : "s"}</h2>
+      <p>These documents were published to the site and deputies can already open them with the code. Enter the code once to add them to the portal so command can edit them.</p>
+      <div class="field"><label for="import-code">${esc(label)} code</label><input id="import-code" type="password" autocomplete="off" required></div>
+      <p class="form-error" id="import-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit" id="import-btn">Add documents</button>
+    </form>`;
+  $("#import-code").focus();
+  $("#import-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const code = $("#import-code").value.trim();
+    if (!code) return ($("#import-error").textContent = "Enter the code.");
+    const btn = $("#import-btn");
+    btn.disabled = true;
+    btn.textContent = "Adding...";
+    let docs;
+    try { docs = (await unseal(g.box, code)).docs; } catch {}
+    btn.disabled = false;
+    btn.textContent = "Add documents";
+    if (!docs) return ($("#import-error").textContent = "That code doesn't open these documents.");
+    const have = new Set(state.docs.map((d) => d.id));
+    for (const d of docs) if (!have.has(d.id)) state.docs.push({ ...d, code });
+    for (const cat of new Set(docs.map((d) => d.category))) if (CODED_SECTIONS.includes(cat)) state.sectionCodes = { ...(state.sectionCodes || {}), [cat]: code };
+    file.locked = file.locked.filter((x) => x !== g);
+    changed();
+    toast(`Added ${docs.length} document${docs.length === 1 ? "" : "s"}.`);
+    location.hash = `docs/${docs[0].id}`;
+  });
+}
+
 function watermark() {
   const text = `${session.name}  ${new Date().toLocaleDateString()}  FCSO`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><text x="10" y="110" transform="rotate(-24 160 90)" font-family="Arial" font-size="15" font-weight="700" fill="#141b3d">${esc(text)}</text></svg>`;
@@ -912,6 +959,7 @@ function accessNote(d) {
 
 function openDoc(id) {
   if (!isAdmin() && id.startsWith("locked-")) return showUnlock(id);
+  if (isAdmin() && id.startsWith("import-")) return showImport(id);
   const d = state.docs.find((x) => x.id === id);
   if (!d) {
     currentDoc = null;
